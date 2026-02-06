@@ -1,0 +1,15 @@
+[package]
+name = "chaos-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chaos-core = { path = "../chaos-core" }
+async-ssh2-tokio = "0.8"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }

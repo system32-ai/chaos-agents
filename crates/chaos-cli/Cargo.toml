@@ -1,0 +1,22 @@
+[package]
+name = "chaos-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "chaos"
+path = "src/main.rs"
+
+[dependencies]
+chaos-core = { path = "../chaos-core" }
+chaos-db = { path = "../chaos-db" }
+chaos-k8s = { path = "../chaos-k8s" }
+chaos-server = { path = "../chaos-server" }
+clap = { version = "4", features = ["derive"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde_yaml = { workspace = true }
+cron = "0.13"
+chrono = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name = "chaos-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chaos-core = { path = "../chaos-core" }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "any"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
