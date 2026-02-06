@@ -1,25 +1,16 @@
 # Chaos Agents
 
-**Autonomous chaos engineering, driven by intelligent agents.**
+Chaos engineering tool that uses agents to break your infrastructure on purpose, then clean up after itself.
 
-Chaos Agents deploys AI-powered agents into your infrastructure that autonomously discover resources, inject faults, observe the blast radius, and cleanly revert — all without human intervention. Instead of writing brittle test scripts, you declare *what* to stress and the agents figure out *how*.
+You tell it what to target (a database, a k8s cluster, some servers), pick the skills you want to run, and it handles discovery, fault injection, and rollback. You can also point an LLM at your infra and let it decide what to break.
 
-## Why Chaos Agents?
+## What it does
 
-Traditional chaos tools require you to hand-craft every failure scenario. Chaos Agents flips this: agents explore your systems, understand their topology, and generate chaos experiments on the fly. The result is deeper coverage, less maintenance, and failures you never thought to test for.
+**Databases** (PostgreSQL, MySQL) — Connects to your DB, looks at the schema, and hammers it with inserts, updates, heavy reads, or config changes. Rolls back everything when done.
 
-## Targets
+**Kubernetes** — Finds workloads in your cluster and starts killing pods, cordoning nodes, dropping network policies, or deploying resource hogs. Cleans up on exit.
 
-### Databases
-Agents connect to your database, introspect the schema, and unleash realistic workloads — high-volume inserts, concurrent updates, adversarial selects, and live configuration mutations. They measure the impact, then roll everything back to the exact prior state.
-
-**Supported:** PostgreSQL, MySQL
-
-### Kubernetes Clusters
-Agents discover running workloads across namespaces and systematically degrade the cluster — killing pods, evicting nodes, injecting network partitions, corrupting DNS. Every action is reversible. Every action is logged.
-
-### Servers
-Agents SSH into target hosts and wreak controlled havoc — filling disks, killing processes, rotating permissions, saturating ports. When the experiment window closes, the agent restores the machine to its original state.
+**Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
 ## Architecture
 
@@ -35,36 +26,35 @@ chaos-core          Orchestrator, agent traits, skill system, rollback engine
 chaos-db  chaos-k8s  chaos-server
 ```
 
-| Crate | Purpose |
-|-------|---------|
+| Crate | What it does |
+|-------|-------------|
 | **chaos-core** | `Agent` and `Skill` traits, experiment orchestrator, LIFO rollback engine, event system, YAML config |
-| **chaos-db** | Database agent. Schema discovery via `information_schema`, skills for insert/update/select load and config mutation |
-| **chaos-k8s** | Kubernetes agent. Pod kill, node drain, network policy chaos, resource stress |
-| **chaos-server** | Server agent. Auto-discovers running services via SSH, then targets disk, permissions, services, CPU, memory |
-| **chaos-llm** | Multi-provider LLM layer (Anthropic, OpenAI, Ollama), tool system, MCP server support (stdio + SSE) |
-| **chaos-cli** | The `chaos` binary. One-off runs, LLM-driven planning, daemon scheduling, skill listing, config validation |
+| **chaos-db** | Database agent — schema discovery via `information_schema`, insert/update/select load, config mutation |
+| **chaos-k8s** | Kubernetes agent — pod kill, node drain, network policy injection, resource stress |
+| **chaos-server** | Server agent — auto-discovers running services via SSH, targets disk/permissions/services/CPU/memory |
+| **chaos-llm** | LLM providers (Anthropic, OpenAI, Ollama), tool system, MCP server support (stdio + SSE) |
+| **chaos-cli** | The `chaos` binary — run experiments, LLM planning, daemon scheduling, skill listing, config validation |
 
-## How It Works
+## How it works
 
-1. **Discover** — The agent connects to the target and maps every resource: tables, pods, services, processes, filesystems.
-2. **Plan** — The orchestrator (or an LLM) selects skills, parameterizes them, and builds an execution plan.
-3. **Execute** — Skills run sequentially or in parallel, each returning a rollback handle.
-4. **Observe** — Events stream to sinks in real time for monitoring and alerting.
-5. **Rollback** — When the experiment window expires (or on failure), all actions revert in LIFO order. No residue.
+1. **Discover** — Agent connects to the target and figures out what's there (tables, pods, services, filesystems, etc.)
+2. **Plan** — The orchestrator (or an LLM) picks skills and sets parameters
+3. **Execute** — Skills run and each one saves what it needs for rollback
+4. **Observe** — Events get emitted in real time
+5. **Rollback** — When the duration expires (or something fails), everything reverts in LIFO order
 
-## Installation
+## Install
 
 ```bash
-# From source
 cargo install --path crates/chaos-cli
 
-# Or build with make
+# or
 make build
 ```
 
 ## Usage
 
-### List available skills
+### List skills
 
 ```bash
 chaos list-skills
@@ -72,8 +62,6 @@ chaos list-skills --target database
 chaos list-skills --target kubernetes
 chaos list-skills --target server
 ```
-
-Output:
 
 ```
 SKILL                     TARGET       DESCRIPTION
@@ -93,62 +81,57 @@ server.cpu_stress         server       Run stress-ng to load CPU, rollback kills
 server.memory_stress      server       Run stress-ng to consume memory, rollback kills the process
 ```
 
-### Run experiments from a config file
+### Run experiments
 
 ```bash
-# Run a database chaos experiment
 chaos run config/example-db.yaml
-
-# Run a Kubernetes chaos experiment
 chaos run config/example-k8s.yaml
-
-# Run a server chaos experiment
 chaos run config/example-server.yaml
 
-# Dry-run (validate and discover only, no execution)
+# dry-run — validates and discovers but doesn't execute anything
 chaos run config/example-db.yaml --dry-run
 ```
 
-### Validate a config without running it
+### Validate config
 
 ```bash
 chaos validate config/example-db.yaml
 ```
 
-### LLM-driven chaos planning
+### LLM planning
 
-Use an LLM to decide what chaos to create based on your infrastructure:
+Let an LLM look at your setup and decide what chaos to run:
 
 ```bash
-# Using Anthropic Claude (default)
+# Anthropic (default)
 export ANTHROPIC_API_KEY="sk-ant-..."
 chaos plan "Test our PostgreSQL database resilience under heavy write load"
 
-# Using OpenAI
+# OpenAI
 export OPENAI_API_KEY="sk-..."
 chaos plan "Kill random pods in the staging namespace" --provider openai
 
-# Using Ollama (local)
+# Ollama (local)
 chaos plan "Stress test the web servers" --provider ollama --model llama3.1
 
-# Using a config file with MCP servers
+# With MCP servers for extra context
 chaos plan "Run chaos on the entire staging environment" --config config/example-llm.yaml
 ```
 
-### Daemon mode (scheduled chaos)
+### Daemon mode
 
 Run experiments on a cron schedule:
 
 ```bash
 chaos daemon config/daemon.yaml
 
-# With a PID file for process management
+# with a PID file
 chaos daemon config/daemon.yaml --pid-file /var/run/chaos.pid
 ```
 
 ## Configuration
 
-### Experiment config
+### Database experiment
 
 ```yaml
 experiments:
@@ -171,7 +154,7 @@ experiments:
     parallel: false
 ```
 
-### Kubernetes config
+### Kubernetes experiment
 
 ```yaml
 experiments:
@@ -194,9 +177,9 @@ experiments:
     duration: "5m"
 ```
 
-### Server config
+### Server experiment
 
-The server agent auto-discovers running services and targets chaos based on what it finds:
+The server agent auto-discovers running services and picks targets based on what it finds:
 
 ```yaml
 experiments:
@@ -227,7 +210,7 @@ experiments:
       - "postgres.*"
 ```
 
-### Daemon (scheduled) config
+### Daemon config
 
 ```yaml
 settings:
@@ -270,12 +253,12 @@ mcp_servers:
 max_turns: 10
 ```
 
-## Rollback guarantees
+## Rollback
 
-Every skill captures the pre-mutation state before making changes. Rollback always happens in LIFO order:
+Every skill saves the original state before doing anything. Rollback happens in LIFO order — last thing changed gets reverted first.
 
-| Skill | Action | Rollback |
-|-------|--------|----------|
+| Skill | What it does | Rollback |
+|-------|-------------|----------|
 | `db.insert_load` | INSERT rows | DELETE by stored IDs |
 | `db.config_change` | ALTER SYSTEM SET | Restore original value |
 | `k8s.pod_kill` | Delete pod | Verify replacement pod is running |
@@ -288,16 +271,16 @@ Every skill captures the pre-mutation state before making changes. Rollback alwa
 | `server.cpu_stress` | Run stress-ng CPU | Kill the process |
 | `server.memory_stress` | Run stress-ng memory | Kill the process |
 
-If the process crashes mid-experiment, the rollback log is serializable and can be replayed on restart.
+If the process crashes mid-experiment, the rollback log is serializable so it can be replayed on restart.
 
 ## Roadmap
 
-- **Adaptive chaos** — Agents that learn from past experiments and automatically escalate intensity toward failure boundaries.
-- **Multi-target experiments** — Coordinated chaos across database + cluster + server in a single experiment.
-- **Observability integrations** — Stream events to Prometheus, Grafana, Datadog, and PagerDuty.
-- **Steady-state assertions** — Define success criteria and let the agent validate system resilience automatically.
-- **Cloud-native targets** — AWS, GCP, and Azure resource-level fault injection (Lambda throttling, S3 latency, IAM revocation).
-- **Distributed agent mesh** — Agents coordinating across regions to simulate real-world cascading failures.
+- Adaptive chaos — agents that learn from past runs and escalate intensity on their own
+- Multi-target experiments — coordinated chaos across DB + k8s + server in one go
+- Observability integrations — Prometheus, Grafana, Datadog, PagerDuty
+- Steady-state assertions — define what "healthy" looks like and let the agent check
+- Cloud targets — AWS, GCP, Azure fault injection (Lambda throttling, S3 latency, IAM revocation)
+- Distributed agent mesh — agents across regions for cascading failure scenarios
 
 ## License
 

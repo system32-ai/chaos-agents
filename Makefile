@@ -10,7 +10,8 @@ TARGETS := \
 	x86_64-apple-darwin \
 	aarch64-apple-darwin
 
-.PHONY: build check test clean install list-skills validate-example release-build release release-dry-run
+IMAGE := chaos-agents
+.PHONY: build check test clean install list-skills validate-example docker docker-run release-build release release-dry-run
 
 build:
 	cargo build --release
@@ -33,6 +34,12 @@ list-skills:
 
 validate-example:
 	cargo run --bin chaos -- validate config/example-db.yaml
+
+docker:
+	docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+
+docker-run:
+	docker run --rm $(IMAGE):latest --help
 
 release-build:
 	@mkdir -p $(RELEASE_DIR)
