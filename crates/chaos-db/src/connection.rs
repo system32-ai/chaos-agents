@@ -1,4 +1,4 @@
-use sqlx::any::AnyPool;
+use sqlx::AnyPool;
 
 use crate::config::DbTargetConfig;
 

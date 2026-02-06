@@ -1,0 +1,54 @@
+settings:
+  max_concurrent: 2
+
+experiments:
+  - experiment:
+      name: "nightly-db-chaos"
+      target: database
+      target_config:
+        connection_url: "postgres://chaos:pw@db.internal:5432/staging"
+        db_type: postgres
+      skills:
+        - skill_name: "db.insert_load"
+          params:
+            rows_per_table: 5000
+      duration: "15m"
+    schedule: "0 0 2 * * *"
+    enabled: true
+
+  - experiment:
+      name: "hourly-pod-chaos"
+      target: kubernetes
+      target_config:
+        namespace: "staging"
+        label_selector: "app=web"
+      skills:
+        - skill_name: "k8s.pod_kill"
+          params:
+            namespace: "staging"
+            count: 1
+      duration: "5m"
+    schedule: "0 0 * * * *"
+    enabled: true
+
+  - experiment:
+      name: "daily-server-chaos"
+      target: server
+      target_config:
+        hosts:
+          - host: "10.0.1.50"
+            port: 22
+            username: "chaos-agent"
+            auth:
+              type: key
+              private_key_path: "~/.ssh/id_ed25519"
+        discovery:
+          enabled: true
+          exclude_services: ["docker"]
+      skills:
+        - skill_name: "server.service_stop"
+          params:
+            max_services: 1
+      duration: "10m"
+    schedule: "0 0 3 * * *"
+    enabled: true

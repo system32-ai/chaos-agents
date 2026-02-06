@@ -1,0 +1,33 @@
+experiments:
+  - name: "server-chaos"
+    target: server
+    target_config:
+      hosts:
+        - host: "10.0.1.50"
+          port: 22
+          username: "chaos-agent"
+          auth:
+            type: key
+            private_key_path: "~/.ssh/id_ed25519"
+      discovery:
+        enabled: true
+        exclude_services: ["docker", "containerd"]
+    skills:
+      - skill_name: "server.service_stop"
+        params:
+          max_services: 2
+      - skill_name: "server.disk_fill"
+        params:
+          size: "5GB"
+          target_mount: "/tmp"
+      - skill_name: "server.cpu_stress"
+        params:
+          workers: 4
+      - skill_name: "server.memory_stress"
+        params:
+          memory: "512M"
+          workers: 2
+    duration: "10m"
+    resource_filters:
+      - "nginx.*"
+      - "postgres.*"

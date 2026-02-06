@@ -1,0 +1,44 @@
+# LLM-driven chaos planning configuration
+llm:
+  provider: anthropic
+  api_key: "${ANTHROPIC_API_KEY}"
+  model: "claude-sonnet-4-5-20250929"
+  max_tokens: 4096
+
+# Optional: OpenAI configuration
+# llm:
+#   provider: openai
+#   api_key: "${OPENAI_API_KEY}"
+#   model: "gpt-4o"
+
+# Optional: Ollama (local) configuration
+# llm:
+#   provider: ollama
+#   base_url: "http://localhost:11434"
+#   model: "llama3.1"
+
+# MCP servers providing additional tools
+mcp_servers:
+  # Example: A monitoring MCP server that provides metrics tools
+  # - name: "prometheus-mcp"
+  #   transport:
+  #     type: stdio
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-prometheus"]
+  #   env:
+  #     PROMETHEUS_URL: "http://prometheus:9090"
+
+  # Example: A Kubernetes MCP server
+  # - name: "k8s-mcp"
+  #   transport:
+  #     type: stdio
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-kubernetes"]
+
+  # Example: SSE-based MCP server
+  # - name: "custom-tools"
+  #   transport:
+  #     type: sse
+  #     url: "http://localhost:8080/mcp"
+
+max_turns: 10

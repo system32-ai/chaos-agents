@@ -94,14 +94,17 @@ impl Skill for PodKillSkill {
             return Err(ChaosError::Discovery("No running pods found".into()));
         }
 
-        let mut rng = rand::thread_rng();
-        let targets: Vec<_> = running_pods
-            .choose_multiple(&mut rng, params.count.min(running_pods.len()))
-            .collect();
+        let targets: Vec<_> = {
+            let mut rng = rand::thread_rng();
+            running_pods
+                .choose_multiple(&mut rng, params.count.min(running_pods.len()))
+                .cloned()
+                .collect()
+        };
 
         let mut killed = Vec::new();
 
-        for pod in targets {
+        for pod in &targets {
             let pod_name = pod.metadata.name.as_deref().unwrap_or("unknown");
             let namespace = pod
                 .metadata

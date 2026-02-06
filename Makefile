@@ -10,10 +10,13 @@ TARGETS := \
 	x86_64-apple-darwin \
 	aarch64-apple-darwin
 
-.PHONY: build test clean release-build release release-dry-run
+.PHONY: build check test clean install list-skills validate-example release-build release release-dry-run
 
 build:
 	cargo build --release
+
+check:
+	cargo check --workspace
 
 test:
 	cargo test --workspace
@@ -21,6 +24,15 @@ test:
 clean:
 	cargo clean
 	rm -rf $(RELEASE_DIR)
+
+install:
+	cargo install --path crates/chaos-cli
+
+list-skills:
+	cargo run --bin chaos -- list-skills
+
+validate-example:
+	cargo run --bin chaos -- validate config/example-db.yaml
 
 release-build:
 	@mkdir -p $(RELEASE_DIR)

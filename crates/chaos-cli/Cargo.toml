@@ -12,6 +12,9 @@ chaos-core = { path = "../chaos-core" }
 chaos-db = { path = "../chaos-db" }
 chaos-k8s = { path = "../chaos-k8s" }
 chaos-server = { path = "../chaos-server" }
+chaos-llm = { path = "../chaos-llm" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 tokio = { workspace = true }
 tracing = { workspace = true }

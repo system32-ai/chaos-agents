@@ -1,0 +1,36 @@
+experiments:
+  - name: "postgres-load-test"
+    target: database
+    target_config:
+      connection_url: "postgres://chaos:password@localhost:5432/mydb"
+      db_type: postgres
+    skills:
+      - skill_name: "db.insert_load"
+        params:
+          rows_per_table: 10000
+          tables: ["users", "orders"]
+        count: 1
+      - skill_name: "db.select_load"
+        params:
+          query_count: 500
+      - skill_name: "db.config_change"
+        params:
+          changes:
+            - param: "work_mem"
+              value: "4MB"
+    duration: "5m"
+    parallel: false
+
+  - name: "mysql-update-chaos"
+    target: database
+    target_config:
+      connection_url: "mysql://chaos:password@localhost:3306/mydb"
+      db_type: mysql
+    skills:
+      - skill_name: "db.update_load"
+        params:
+          rows: 200
+      - skill_name: "db.insert_load"
+        params:
+          rows_per_table: 5000
+    duration: "3m"

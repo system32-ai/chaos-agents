@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use sqlx::any::AnyPool;
+use sqlx::AnyPool;
 
 use chaos_core::agent::{Agent, AgentStatus};
 use chaos_core::discovery::DiscoveredResource;
 use chaos_core::error::ChaosResult;
 use chaos_core::skill::{Skill, SkillContext, TargetDomain};
 
-use crate::config::{DbTargetConfig, DbType};
+use crate::config::DbTargetConfig;
 use crate::connection::create_pool;
 use crate::schema_discovery::discover_schema;
 use crate::skills::config_change::ConfigChangeSkill;

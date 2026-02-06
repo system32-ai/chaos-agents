@@ -3,7 +3,7 @@ use chaos_core::error::{ChaosError, ChaosResult};
 use chaos_core::rollback::RollbackHandle;
 use chaos_core::skill::{Skill, SkillContext, SkillDescriptor, TargetDomain};
 use serde::Deserialize;
-use sqlx::any::AnyPool;
+use sqlx::AnyPool;
 use sqlx::Row;
 
 pub struct SelectLoadSkill;

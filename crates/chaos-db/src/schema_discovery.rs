@@ -1,5 +1,5 @@
 use chaos_core::discovery::{ColumnInfo, DbResource};
-use sqlx::any::AnyPool;
+use sqlx::AnyPool;
 use sqlx::Row;
 
 /// Introspect database schema using information_schema (works for both Pg and MySQL).

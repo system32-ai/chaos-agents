@@ -1,12 +1,10 @@
 [package]
-name = "chaos-k8s"
+name = "chaos-llm"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 chaos-core = { path = "../chaos-core" }
-kube = { version = "0.98", features = ["client", "runtime"] }
-k8s-openapi = { version = "0.24", features = ["latest"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -14,5 +12,5 @@ serde_yaml = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
-rand = { workspace = true }
-uuid = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { workspace = true }

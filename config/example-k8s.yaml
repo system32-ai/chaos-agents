@@ -1,0 +1,32 @@
+experiments:
+  - name: "k8s-pod-chaos"
+    target: kubernetes
+    target_config:
+      namespace: "staging"
+      label_selector: "app=web"
+    skills:
+      - skill_name: "k8s.pod_kill"
+        params:
+          namespace: "staging"
+          label_selector: "app=web"
+          count: 2
+      - skill_name: "k8s.network_chaos"
+        params:
+          namespace: "staging"
+          pod_selector:
+            app: "web"
+    duration: "5m"
+
+  - name: "k8s-node-drain"
+    target: kubernetes
+    target_config:
+      namespace: "default"
+    skills:
+      - skill_name: "k8s.node_drain"
+        params: {}
+      - skill_name: "k8s.resource_stress"
+        params:
+          namespace: "default"
+          cpu_workers: 4
+          memory: "512M"
+    duration: "10m"
