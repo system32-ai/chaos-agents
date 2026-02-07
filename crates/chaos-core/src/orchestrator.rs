@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
@@ -17,6 +18,7 @@ pub struct Orchestrator {
     agents: HashMap<TargetDomain, Arc<RwLock<Box<dyn Agent>>>>,
     experiments: Arc<RwLock<HashMap<Uuid, Experiment>>>,
     event_sinks: Vec<Arc<dyn EventSink>>,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl Orchestrator {
@@ -25,7 +27,14 @@ impl Orchestrator {
             agents: HashMap::new(),
             experiments: Arc::new(RwLock::new(HashMap::new())),
             event_sinks: Vec::new(),
+            cancelled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Returns a shared cancellation flag. Set it to `true` to cancel running experiments.
+    /// Cancelled experiments skip remaining skills and soak period, but still run rollback.
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        self.cancelled.clone()
     }
 
     pub fn register_agent(&mut self, agent: Box<dyn Agent>) {
@@ -108,8 +117,8 @@ impl Orchestrator {
             .await;
         }
 
-        // Wait for configured duration (soak period)
-        if execution_result.is_ok() {
+        // Wait for configured duration (soak period), interruptible by cancel flag
+        if execution_result.is_ok() && !self.cancelled.load(Ordering::Relaxed) {
             experiment.status = ExperimentStatus::WaitingDuration;
             self.emit(ExperimentEvent::DurationWaitBegin {
                 experiment_id,
@@ -117,7 +126,21 @@ impl Orchestrator {
             })
             .await;
             tracing::info!(duration = ?config.duration, "Waiting for chaos duration");
-            tokio::time::sleep(config.duration).await;
+
+            let cancel = self.cancelled.clone();
+            tokio::select! {
+                _ = tokio::time::sleep(config.duration) => {}
+                _ = async {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        if cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                    }
+                } => {
+                    tracing::info!("Experiment cancelled during soak period, proceeding to rollback");
+                }
+            }
         }
 
         // Rollback phase (always runs)
@@ -187,6 +210,11 @@ impl Orchestrator {
         let agent = agent_lock.read().await;
 
         for invocation in &experiment.config.skills {
+            if self.cancelled.load(Ordering::Relaxed) {
+                tracing::info!("Experiment cancelled, skipping remaining skills");
+                break;
+            }
+
             let skill = agent.skill_by_name(&invocation.skill_name).ok_or_else(|| {
                 ChaosError::Config(format!("Unknown skill: {}", invocation.skill_name))
             })?;

@@ -137,7 +137,10 @@ impl Tool for RunExperimentTool {
                 "properties": {
                     "name": { "type": "string", "description": "Experiment name" },
                     "target": { "type": "string", "enum": ["database", "kubernetes", "server"] },
-                    "target_config": { "type": "object", "description": "Target-specific configuration" },
+                    "target_config": {
+                        "type": "object",
+                        "description": "Target connection config. MUST reuse the exact same config you passed to discover_resources. For database: {\"connection_url\": \"postgres://user:pass@host:5432/db\", \"db_type\": \"postgres\"} (db_type values: postgres, mysql, cockroach_db, yugabyte_db, mongo_d_b). For kubernetes: {\"namespace\": \"default\", \"label_selector\": \"app=web\"}. For server: {\"hosts\": [{\"host\": \"1.2.3.4\", \"port\": 22, \"username\": \"user\", \"auth\": {\"type\": \"key\", \"private_key_path\": \"~/.ssh/id_ed25519\"}}]}"
+                    },
                     "skills": {
                         "type": "array",
                         "items": {

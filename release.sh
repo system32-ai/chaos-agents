@@ -91,9 +91,13 @@ ls -lh "$RELEASE_DIR"/*.tar.gz
 echo ""
 read -rp "Create GitHub release v${VERSION}? [y/N] " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    NOTES_FLAG="--generate-notes"
+    if [ -f RELEASE_NOTES.md ]; then
+        NOTES_FLAG="--notes-file RELEASE_NOTES.md"
+    fi
     gh release create "v${VERSION}" \
         --title "v${VERSION}" \
-        --generate-notes \
+        $NOTES_FLAG \
         "${RELEASE_DIR}"/*.tar.gz
     info "Released v${VERSION}"
 else

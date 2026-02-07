@@ -150,6 +150,15 @@ pub async fn execute(args: AgentArgs) -> anyhow::Result<()> {
     let mut orchestrator = Orchestrator::new();
     orchestrator.add_event_sink(Arc::new(TracingEventSink));
 
+    // Set up Ctrl+C handler to cancel experiments gracefully (rollback still runs)
+    let cancel_flag = orchestrator.cancel_flag();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            eprintln!("\nReceived Ctrl+C, cancelling experiment (rollback will still run)...");
+            cancel_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
+
     for experiment in &chaos_config.experiments {
         register_agent_for_experiment(&mut orchestrator, experiment)?;
     }
