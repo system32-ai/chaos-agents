@@ -39,17 +39,15 @@ pub fn spawn_execution(
     let (experiment_sink, experiment_rx) = ChannelEventSink::new();
 
     let prompt = output.prompt.clone();
-    let target_domain = output.target_domain.clone();
-    let target_config = output.target_config.clone();
+    let duration = output.duration.clone();
 
     let handle = tokio::spawn(async move {
         // Phase 1: Plan
-        // Inject target info into the prompt so the LLM knows what to target
+        // Inject duration preference into the prompt
         let enriched_prompt = format!(
-            "{}\n\nTarget: {}\nTarget config: {}",
+            "{}\n\nExperiment duration: {}",
             prompt,
-            target_domain,
-            serde_json::to_string_pretty(&target_config).unwrap_or_default()
+            duration,
         );
 
         let plan_result = match planner.plan(&enriched_prompt).await {

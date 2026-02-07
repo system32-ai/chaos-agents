@@ -35,10 +35,9 @@ pub enum WizardTransition {
 #[derive(Clone)]
 pub struct WizardOutput {
     pub provider_config: LlmProviderConfig,
-    pub target_domain: String,
-    pub target_config: serde_json::Value,
     pub prompt: String,
     pub max_turns: u32,
+    pub duration: String,
 }
 
 pub struct WizardState {
@@ -73,6 +72,7 @@ pub struct WizardState {
     pub target_field_index: usize,
     // Prompt
     pub prompt_input: TextInput,
+    pub duration_input: TextInput,
     // Error
     pub error_message: Option<String>,
 }
@@ -200,6 +200,7 @@ impl WizardState {
             server_auth_value_input: TextInput::new(" Key Path ").with_content(&default_key_path),
             target_field_index: 0,
             prompt_input: TextInput::new(" Chaos Prompt ").with_multiline(),
+            duration_input: TextInput::new(" Duration ").with_content("5m"),
             error_message: None,
         }
     }
@@ -209,10 +210,6 @@ impl WizardState {
             .selected_provider
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No provider selected"))?;
-        let target = self
-            .selected_target
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("No target selected"))?;
 
         let provider_config = match provider.as_str() {
             "anthropic" => LlmProviderConfig::Anthropic {
@@ -254,66 +251,6 @@ impl WizardState {
             _ => anyhow::bail!("Unknown provider: {provider}"),
         };
 
-        let target_config = match target.as_str() {
-            "database" => {
-                let db_type = match self.db_type_selector.selected_index() {
-                    0 => "postgres",
-                    1 => "mysql",
-                    2 => "mongo_d_b",
-                    _ => "postgres",
-                };
-                serde_json::json!({
-                    "connection_url": self.db_url_input.content,
-                    "db_type": db_type,
-                })
-            }
-            "kubernetes" => {
-                let mut config = serde_json::json!({
-                    "namespace": if self.k8s_namespace_input.content.is_empty() {
-                        "default"
-                    } else {
-                        &self.k8s_namespace_input.content
-                    },
-                });
-                if !self.k8s_label_input.content.is_empty() {
-                    config["label_selector"] =
-                        serde_json::Value::String(self.k8s_label_input.content.clone());
-                }
-                if !self.k8s_kubeconfig_input.content.is_empty() {
-                    config["kubeconfig"] =
-                        serde_json::Value::String(self.k8s_kubeconfig_input.content.clone());
-                }
-                config
-            }
-            "server" => {
-                let auth_type = if self.server_auth_selector.selected_index() == 0 {
-                    "key"
-                } else {
-                    "password"
-                };
-                let auth = if auth_type == "key" {
-                    serde_json::json!({
-                        "type": "key",
-                        "private_key_path": self.server_auth_value_input.content,
-                    })
-                } else {
-                    serde_json::json!({
-                        "type": "password",
-                        "password": self.server_auth_value_input.content,
-                    })
-                };
-                serde_json::json!({
-                    "hosts": [{
-                        "host": self.server_host_input.content,
-                        "port": self.server_port_input.content.parse::<u16>().unwrap_or(22),
-                        "username": self.server_username_input.content,
-                        "auth": auth,
-                    }],
-                })
-            }
-            _ => anyhow::bail!("Unknown target: {target}"),
-        };
-
         let max_turns = self
             .max_turns_input
             .content
@@ -321,12 +258,17 @@ impl WizardState {
             .parse::<u32>()
             .unwrap_or(10);
 
+        let duration = if self.duration_input.content.trim().is_empty() {
+            "5m".to_string()
+        } else {
+            self.duration_input.content.trim().to_string()
+        };
+
         Ok(WizardOutput {
             provider_config,
-            target_domain: target.clone(),
-            target_config,
             prompt: self.prompt_input.content.clone(),
             max_turns,
+            duration,
         })
     }
 }
@@ -363,17 +305,13 @@ pub fn handle_key(state: &mut WizardState, key: KeyEvent) -> WizardTransition {
                 state.screen = WizardScreen::SelectProvider;
                 WizardTransition::Back(WizardScreen::SelectProvider)
             }
-            WizardScreen::SelectTarget => {
+            WizardScreen::SelectTarget | WizardScreen::ConfigureTarget => {
                 state.screen = WizardScreen::ConfigureProvider;
                 WizardTransition::Back(WizardScreen::ConfigureProvider)
             }
-            WizardScreen::ConfigureTarget => {
-                state.screen = WizardScreen::SelectTarget;
-                WizardTransition::Back(WizardScreen::SelectTarget)
-            }
             WizardScreen::EnterPrompt => {
-                state.screen = WizardScreen::ConfigureTarget;
-                WizardTransition::Back(WizardScreen::ConfigureTarget)
+                state.screen = WizardScreen::ConfigureProvider;
+                WizardTransition::Back(WizardScreen::ConfigureProvider)
             }
             WizardScreen::Review => {
                 state.screen = WizardScreen::EnterPrompt;

@@ -25,6 +25,11 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect) {
         Span::styled(format!("[{phase_label}]"), phase_style),
         Span::raw("  "),
         Span::styled(
+            format!("Duration: {}", state.wizard_output.duration),
+            theme::dim_style(),
+        ),
+        Span::raw("  "),
+        Span::styled(
             format!("Skills: {} executed", state.skills.len()),
             theme::dim_style(),
         ),

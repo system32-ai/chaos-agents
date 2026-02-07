@@ -17,7 +17,7 @@ pub fn render(state: &WizardState, frame: &mut Frame, area: Rect) {
         ])
         .split(area);
 
-    let title = Paragraph::new(" Step 1/6: Select LLM Provider")
+    let title = Paragraph::new(" Step 1/4: Select LLM Provider")
         .style(theme::title_style())
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(title, chunks[0]);

@@ -17,7 +17,7 @@ pub fn render(state: &WizardState, frame: &mut Frame, area: Rect) {
         ])
         .split(area);
 
-    let title = Paragraph::new(" Step 6/6: Review & Confirm")
+    let title = Paragraph::new(" Step 4/4: Review & Confirm")
         .style(theme::title_style())
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(title, chunks[0]);
@@ -29,10 +29,6 @@ pub fn render(state: &WizardState, frame: &mut Frame, area: Rect) {
     // Build summary
     let provider = state
         .selected_provider
-        .as_deref()
-        .unwrap_or("unknown");
-    let target = state
-        .selected_target
         .as_deref()
         .unwrap_or("unknown");
 
@@ -47,44 +43,10 @@ pub fn render(state: &WizardState, frame: &mut Frame, area: Rect) {
         &state.model_input.content
     };
 
-    let target_details = match target {
-        "database" => {
-            let db_type = match state.db_type_selector.selected_index() {
-                0 => "postgres",
-                1 => "mysql",
-                2 => "mongodb",
-                _ => "unknown",
-            };
-            format!(
-                "Type: {}\n  URL: {}",
-                db_type,
-                mask_url(&state.db_url_input.content),
-            )
-        }
-        "kubernetes" => {
-            format!(
-                "Namespace: {}\n  Labels: {}",
-                if state.k8s_namespace_input.content.is_empty() {
-                    "default"
-                } else {
-                    &state.k8s_namespace_input.content
-                },
-                if state.k8s_label_input.content.is_empty() {
-                    "(none)"
-                } else {
-                    &state.k8s_label_input.content
-                },
-            )
-        }
-        "server" => {
-            format!(
-                "Host: {}:{}\n  User: {}",
-                state.server_host_input.content,
-                state.server_port_input.content,
-                state.server_username_input.content,
-            )
-        }
-        _ => "Unknown".to_string(),
+    let duration = if state.duration_input.content.trim().is_empty() {
+        "5m"
+    } else {
+        state.duration_input.content.trim()
     };
 
     let prompt_preview = if state.prompt_input.content.len() > 200 {
@@ -109,14 +71,9 @@ pub fn render(state: &WizardState, frame: &mut Frame, area: Rect) {
                 theme::normal_style(),
             ),
         ]),
-        Line::from(""),
         Line::from(vec![
-            Span::styled("  Target:   ", Style::default().fg(Color::Cyan)),
-            Span::styled(capitalize(target), theme::normal_style()),
-        ]),
-        Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(target_details, theme::dim_style()),
+            Span::styled("  Duration: ", Style::default().fg(Color::Cyan)),
+            Span::styled(duration, theme::normal_style()),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -163,17 +120,4 @@ fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(f) => f.to_uppercase().to_string() + c.as_str(),
     }
-}
-
-fn mask_url(url: &str) -> String {
-    // Mask password in database URLs
-    if let Some(at_pos) = url.find('@') {
-        if let Some(colon_pos) = url[..at_pos].rfind(':') {
-            let scheme_end = url.find("://").map(|p| p + 3).unwrap_or(0);
-            if colon_pos > scheme_end {
-                return format!("{}****{}", &url[..colon_pos + 1], &url[at_pos..]);
-            }
-        }
-    }
-    url.to_string()
 }
