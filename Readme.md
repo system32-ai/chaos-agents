@@ -4,36 +4,11 @@ Chaos engineering tool that uses agents to break your infrastructure on purpose,
 
 You tell it what to target (a database, a k8s cluster, some servers), pick the skills you want to run, and it handles discovery, fault injection, and rollback. You can also point an LLM at your infra and let it decide what to break.
 
-## What it does
-
 **Databases** (PostgreSQL, MySQL) — Connects to your DB, looks at the schema, and hammers it with inserts, updates, heavy reads, or config changes. Rolls back everything when done.
 
 **Kubernetes** — Finds workloads in your cluster and starts killing pods, cordoning nodes, dropping network policies, or deploying resource hogs. Cleans up on exit.
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
-
-## Architecture
-
-```
-chaos-cli           CLI & daemon scheduler
-    |
-chaos-llm           LLM orchestration (Anthropic, OpenAI, Ollama) + MCP tools
-    |
-chaos-core          Orchestrator, agent traits, skill system, rollback engine
-    |
-  +--------+-----------+
-  |        |           |
-chaos-db  chaos-k8s  chaos-server
-```
-
-| Crate | What it does |
-|-------|-------------|
-| **chaos-core** | `Agent` and `Skill` traits, experiment orchestrator, LIFO rollback engine, event system, YAML config |
-| **chaos-db** | Database agent — schema discovery via `information_schema`, insert/update/select load, config mutation |
-| **chaos-k8s** | Kubernetes agent — pod kill, node drain, network policy injection, resource stress |
-| **chaos-server** | Server agent — auto-discovers running services via SSH, targets disk/permissions/services/CPU/memory |
-| **chaos-llm** | LLM providers (Anthropic, OpenAI, Ollama), tool system, MCP server support (stdio + SSE) |
-| **chaos-cli** | The `chaos` binary — run experiments, LLM planning, daemon scheduling, skill listing, config validation |
 
 ## How it works
 
@@ -298,6 +273,10 @@ If the process crashes mid-experiment, the rollback log is serializable so it ca
 - Steady-state assertions — define what "healthy" looks like and let the agent check
 - Cloud targets — AWS, GCP, Azure fault injection (Lambda throttling, S3 latency, IAM revocation)
 - Distributed agent mesh — agents across regions for cascading failure scenarios
+
+## Community
+
+Join us on [Discord](https://discord.com/channels/1469489696336908361/1469489765219958968) for questions, feedback, and discussion.
 
 ## License
 

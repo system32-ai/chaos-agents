@@ -41,15 +41,30 @@ docker:
 docker-run:
 	docker run --rm $(IMAGE):latest --help
 
+HOST_TARGET := $(shell rustc -vV | grep '^host:' | cut -d' ' -f2)
+
 release-build:
 	@mkdir -p $(RELEASE_DIR)
 	@for target in $(TARGETS); do \
 		echo "Building $$target..."; \
-		cross build --release --target $$target -p chaos-cli && \
+		if [ "$$target" = "$(HOST_TARGET)" ]; then \
+			cargo build --release --target $$target -p chaos-cli; \
+		else \
+			cross build --release --target $$target -p chaos-cli; \
+		fi && \
 		tar -czf $(RELEASE_DIR)/$(BINARY)-$(VERSION)-$$target.tar.gz \
 			-C target/$$target/release $(BINARY) || \
 		echo "WARN: Failed to build $$target, skipping"; \
 	done
+	@echo "Artifacts in $(RELEASE_DIR):"
+	@ls -lh $(RELEASE_DIR)/
+
+release-build-local:
+	@mkdir -p $(RELEASE_DIR)
+	@echo "Building $(HOST_TARGET)..."
+	@cargo build --release --target $(HOST_TARGET) -p chaos-cli && \
+		tar -czf $(RELEASE_DIR)/$(BINARY)-$(VERSION)-$(HOST_TARGET).tar.gz \
+			-C target/$(HOST_TARGET)/release $(BINARY)
 	@echo "Artifacts in $(RELEASE_DIR):"
 	@ls -lh $(RELEASE_DIR)/
 

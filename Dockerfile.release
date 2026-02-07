@@ -1,0 +1,31 @@
+ARG TARGET=x86_64-unknown-linux-gnu
+
+FROM rust:1.83-bookworm AS builder
+
+ARG TARGET
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    musl-tools \
+    gcc-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rustup target add \
+    x86_64-unknown-linux-gnu \
+    x86_64-unknown-linux-musl \
+    aarch64-unknown-linux-gnu \
+    aarch64-unknown-linux-musl
+
+# Configure cross-linkers
+RUN mkdir -p /root/.cargo && printf '\
+[target.aarch64-unknown-linux-gnu]\n\
+linker = "aarch64-linux-gnu-gcc"\n\
+[target.aarch64-unknown-linux-musl]\n\
+linker = "aarch64-linux-gnu-gcc"\n' \
+> /root/.cargo/config.toml
+
+WORKDIR /app
+COPY . .
+
+RUN cargo build --release --target ${TARGET} -p chaos-cli
+
+RUN mkdir -p /out && cp target/${TARGET}/release/chaos /out/chaos
