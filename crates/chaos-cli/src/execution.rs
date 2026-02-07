@@ -39,10 +39,26 @@ impl Tool for LiveDiscoverResourcesTool {
         let target = arguments["target"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing 'target' field"))?;
-        let target_config_json = &arguments["target_config"];
+        let mut target_config_json = arguments["target_config"].clone();
+
+        // Auto-detect db_type from connection_url if missing
+        if matches!(target, "database" | "db") {
+            if target_config_json.get("db_type").map_or(true, |v| v.is_null()) {
+                if let Some(url) = target_config_json.get("connection_url").and_then(|v| v.as_str()) {
+                    let db_type = if url.starts_with("mongodb://") || url.starts_with("mongodb+srv://") {
+                        "mongo_d_b"
+                    } else if url.starts_with("mysql://") {
+                        "mysql"
+                    } else {
+                        "postgres"
+                    };
+                    target_config_json["db_type"] = serde_json::Value::String(db_type.to_string());
+                }
+            }
+        }
 
         // Convert JSON target_config to serde_yaml::Value
-        let json_str = serde_json::to_string(target_config_json)?;
+        let json_str = serde_json::to_string(&target_config_json)?;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(&json_str)?;
 
         let mut agent: Box<dyn Agent> = match target {

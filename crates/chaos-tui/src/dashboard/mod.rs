@@ -241,9 +241,8 @@ impl DashboardState {
     }
 
     fn auto_scroll_conversation(&mut self) {
-        if self.conversation.len() > 0 {
-            self.conversation_scroll = self.conversation.len().saturating_sub(1);
-        }
+        // Set to max so Paragraph::scroll always shows the bottom
+        self.conversation_scroll = u16::MAX as usize;
     }
 
     pub fn tick(&mut self) {
@@ -345,8 +344,8 @@ pub fn handle_key(state: &mut DashboardState, key: KeyEvent, should_quit: &mut b
             }
         }
         KeyCode::Down => {
-            if state.active_panel == 0 && state.conversation_scroll < state.conversation.len().saturating_sub(1) {
-                state.conversation_scroll += 1;
+            if state.active_panel == 0 {
+                state.conversation_scroll = state.conversation_scroll.saturating_add(1).min(u16::MAX as usize);
             }
         }
         _ => {}

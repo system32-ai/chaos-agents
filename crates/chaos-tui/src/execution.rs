@@ -105,7 +105,10 @@ impl Tool for LiveDiscoverResourcesTool {
                 "required": ["target", "target_config"],
                 "properties": {
                     "target": { "type": "string", "enum": ["database", "kubernetes", "server"] },
-                    "target_config": { "type": "object", "description": "Target-specific configuration" }
+                    "target_config": {
+                        "type": "object",
+                        "description": "Target connection config. For database: {\"connection_url\": \"postgres://user:pass@host:5432/db\", \"db_type\": \"postgres\"} (db_type values: postgres, mysql, cockroach_db, yugabyte_db, mongo_d_b). For kubernetes: {\"namespace\": \"default\"}. For server: {\"hosts\": [{\"host\": \"1.2.3.4\", \"port\": 22, \"username\": \"user\", \"auth\": {\"type\": \"key\", \"private_key_path\": \"~/.ssh/id_ed25519\"}}]}"
+                    }
                 }
             }),
         }
@@ -115,9 +118,25 @@ impl Tool for LiveDiscoverResourcesTool {
         let target = arguments["target"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing 'target' field"))?;
-        let target_config_json = &arguments["target_config"];
+        let mut target_config_json = arguments["target_config"].clone();
 
-        let json_str = serde_json::to_string(target_config_json)?;
+        // Auto-detect db_type from connection_url if missing
+        if matches!(target, "database" | "db") {
+            if target_config_json.get("db_type").map_or(true, |v| v.is_null()) {
+                if let Some(url) = target_config_json.get("connection_url").and_then(|v| v.as_str()) {
+                    let db_type = if url.starts_with("mongodb://") || url.starts_with("mongodb+srv://") {
+                        "mongo_d_b"
+                    } else if url.starts_with("mysql://") {
+                        "mysql"
+                    } else {
+                        "postgres"
+                    };
+                    target_config_json["db_type"] = serde_json::Value::String(db_type.to_string());
+                }
+            }
+        }
+
+        let json_str = serde_json::to_string(&target_config_json)?;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(&json_str)?;
 
         let mut agent: Box<dyn Agent> = match target {

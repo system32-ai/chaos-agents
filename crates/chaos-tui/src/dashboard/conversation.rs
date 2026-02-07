@@ -1,5 +1,5 @@
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use super::DashboardState;
 use crate::theme;
@@ -12,7 +12,7 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect, active: boo
     };
 
     let block = Block::default()
-        .title(" LLM Conversation ")
+        .title(" Chat ")
         .borders(Borders::ALL)
         .border_style(border_style);
 
@@ -24,20 +24,9 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect, active: boo
         return;
     }
 
-    let inner_height = area.height.saturating_sub(2) as usize;
-    let start = if state.conversation.len() > inner_height {
-        state
-            .conversation_scroll
-            .min(state.conversation.len().saturating_sub(inner_height))
-    } else {
-        0
-    };
-
-    let items: Vec<ListItem> = state
+    let lines: Vec<Line> = state
         .conversation
         .iter()
-        .skip(start)
-        .take(inner_height)
         .map(|entry| {
             let (prefix, style) = match entry.role.as_str() {
                 "assistant" => ("AI", Style::default().fg(Color::Green)),
@@ -46,20 +35,17 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect, active: boo
                 _ => ("  ", theme::normal_style()),
             };
 
-            // Truncate long lines for display
-            let content = if entry.content.len() > 120 {
-                format!("{}...", &entry.content[..120])
-            } else {
-                entry.content.clone()
-            };
-
-            ListItem::new(Line::from(vec![
+            Line::from(vec![
                 Span::styled(format!("[{prefix}] "), style),
-                Span::styled(content, theme::normal_style()),
-            ]))
+                Span::styled(entry.content.clone(), theme::normal_style()),
+            ])
         })
         .collect();
 
-    let list = List::new(items).block(block);
-    frame.render_widget(list, area);
+    let scroll_y = state.conversation_scroll.min(u16::MAX as usize) as u16;
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false })
+        .scroll((scroll_y, 0));
+    frame.render_widget(paragraph, area);
 }
