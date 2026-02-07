@@ -33,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         commands::Commands::Run(args) => commands::run::execute(args).await,
         commands::Commands::Plan(args) => commands::plan::execute(args).await,
+        commands::Commands::Agent(args) => commands::agent::execute(args).await,
         commands::Commands::Daemon(args) => commands::daemon::execute(args).await,
         commands::Commands::ListSkills(args) => commands::list_skills::execute(args).await,
         commands::Commands::Validate(args) => commands::validate::execute(args).await,

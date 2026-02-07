@@ -67,8 +67,8 @@ pub async fn execute(args: RunArgs) -> anyhow::Result<()> {
     for experiment in config.experiments {
         tracing::info!(name = %experiment.name, "Starting experiment");
         match orchestrator.run_experiment(experiment.clone()).await {
-            Ok(id) => {
-                println!("Experiment '{}' completed successfully (id: {})", experiment.name, id);
+            Ok(report) => {
+                println!("{report}");
             }
             Err(e) => {
                 eprintln!("Experiment '{}' failed: {e}", experiment.name);

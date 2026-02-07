@@ -5,5 +5,6 @@ pub mod error;
 pub mod event;
 pub mod experiment;
 pub mod orchestrator;
+pub mod report;
 pub mod rollback;
 pub mod skill;

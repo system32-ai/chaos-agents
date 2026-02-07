@@ -32,9 +32,9 @@ pub struct PlanArgs {
     /// Path to LLM/MCP config file
     #[arg(short, long)]
     pub config: Option<PathBuf>,
-    /// LLM provider: anthropic, openai, or ollama
-    #[arg(long, default_value = "anthropic", env = "CHAOS_PROVIDER")]
-    pub provider: String,
+    /// LLM provider: anthropic, openai, or ollama (auto-detected from API key env vars if not set)
+    #[arg(long, env = "CHAOS_PROVIDER")]
+    pub provider: Option<String>,
     /// Model to use
     #[arg(long, env = "CHAOS_MODEL")]
     pub model: Option<String>,
@@ -71,8 +71,27 @@ pub async fn execute(args: PlanArgs) -> anyhow::Result<()> {
     run_planner(planner, &args.prompt).await
 }
 
+fn detect_provider(args: &PlanArgs) -> String {
+    if let Some(ref provider) = args.provider {
+        return provider.clone();
+    }
+    if args.api_key.is_some() {
+        // If --api-key is given but no --provider, default to anthropic
+        return "anthropic".to_string();
+    }
+    if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+        return "anthropic".to_string();
+    }
+    if std::env::var("OPENAI_API_KEY").is_ok() {
+        return "openai".to_string();
+    }
+    // Default fallback (ollama doesn't need an API key)
+    "ollama".to_string()
+}
+
 fn build_provider_config(args: &PlanArgs) -> anyhow::Result<LlmProviderConfig> {
-    match args.provider.as_str() {
+    let provider = detect_provider(args);
+    match provider.as_str() {
         "anthropic" => {
             let api_key = args
                 .api_key

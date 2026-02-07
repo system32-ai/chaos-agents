@@ -2,7 +2,7 @@ experiments:
   - name: "postgres-load-test"
     target: database
     target_config:
-      connection_url: "postgres://chaos:password@localhost:5432/mydb"
+      connection_url: "postgres://postgres:mysecretpassword@localhost:5432/postgres"
       db_type: postgres
     skills:
       - skill_name: "db.insert_load"

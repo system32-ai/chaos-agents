@@ -116,10 +116,13 @@ pub async fn execute(args: DaemonArgs) -> anyhow::Result<()> {
                             }
 
                             tracing::info!(experiment = %exp_name, "Scheduled experiment starting");
-                            if let Err(e) = orchestrator.run_experiment(exp_config).await {
-                                tracing::error!(experiment = %exp_name, error = %e, "Scheduled experiment failed");
-                            } else {
-                                tracing::info!(experiment = %exp_name, "Scheduled experiment completed");
+                            match orchestrator.run_experiment(exp_config).await {
+                                Ok(report) => {
+                                    tracing::info!(experiment = %exp_name, report = %report, "Scheduled experiment completed");
+                                }
+                                Err(e) => {
+                                    tracing::error!(experiment = %exp_name, error = %e, "Scheduled experiment failed");
+                                }
                             }
                         });
                     }

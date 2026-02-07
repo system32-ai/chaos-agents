@@ -92,22 +92,43 @@ chaos validate config/example-db.yaml
 
 ### LLM planning
 
-Let an LLM look at your setup and decide what chaos to run:
+Let an LLM look at your setup and decide what chaos to run. The provider is auto-detected from your API key environment variables:
 
 ```bash
-# Anthropic (default)
+# Anthropic — auto-detected from ANTHROPIC_API_KEY
 export ANTHROPIC_API_KEY="sk-ant-..."
 chaos plan "Test our PostgreSQL database resilience under heavy write load"
 
-# OpenAI
+# OpenAI — auto-detected from OPENAI_API_KEY
 export OPENAI_API_KEY="sk-..."
-chaos plan "Kill random pods in the staging namespace" --provider openai
+chaos plan "Kill random pods in the staging namespace"
 
-# Ollama (local)
-chaos plan "Stress test the web servers" --provider ollama --model llama3.1
+# Ollama (local) — used as fallback when no API key is set
+chaos plan "Stress test the web servers" --model llama3.1
+
+# Explicit provider override
+chaos plan "Break the database" --provider openai
 
 # With MCP servers for extra context
 chaos plan "Run chaos on the entire staging environment" --config config/example-llm.yaml
+```
+
+### Agent mode
+
+Plan and execute in one step — the LLM generates experiments, you review, and approve:
+
+```bash
+# Plan and run interactively
+chaos agent "Test our PostgreSQL database resilience under heavy write load"
+
+# Preview the generated config without executing
+chaos agent "Kill random pods in staging" --dry-run
+
+# Auto-approve (skip confirmation)
+chaos agent "Stress test the web servers" -y
+
+# Save the generated config to a file and run
+chaos agent "Fill disk on 10.0.1.50" --save plan.yaml
 ```
 
 ### Daemon mode

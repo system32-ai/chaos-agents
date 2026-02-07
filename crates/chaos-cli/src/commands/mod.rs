@@ -1,5 +1,6 @@
 use clap::Subcommand;
 
+pub mod agent;
 pub mod daemon;
 pub mod list_skills;
 pub mod plan;
@@ -12,6 +13,8 @@ pub enum Commands {
     Run(run::RunArgs),
     /// Use an LLM to plan and orchestrate chaos experiments
     Plan(plan::PlanArgs),
+    /// Plan experiments with an LLM, then execute them interactively
+    Agent(agent::AgentArgs),
     /// Start in daemon mode with scheduled experiments
     Daemon(daemon::DaemonArgs),
     /// List all available chaos skills

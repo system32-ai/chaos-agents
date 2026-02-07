@@ -18,6 +18,7 @@ pub struct ChaosPlanner {
     system_prompt: String,
     messages: Vec<ChatMessage>,
     max_turns: u32,
+    verbose: bool,
 }
 
 impl ChaosPlanner {
@@ -39,6 +40,7 @@ impl ChaosPlanner {
             system_prompt: default_system_prompt(),
             messages: Vec::new(),
             max_turns: 10,
+            verbose: false,
         }
     }
 
@@ -63,6 +65,11 @@ impl ChaosPlanner {
     /// Set max agentic turns.
     pub fn set_max_turns(&mut self, turns: u32) {
         self.max_turns = turns;
+    }
+
+    /// Enable verbose output (prints intermediate LLM messages and tool calls to stderr).
+    pub fn set_verbose(&mut self, verbose: bool) {
+        self.verbose = verbose;
     }
 
     /// Update the skills list (call after agents are initialized).
@@ -94,8 +101,16 @@ impl ChaosPlanner {
         let tool_defs = self.tool_registry.definitions();
         let mut experiments = Vec::new();
 
+        // Track target configs from discover_resources calls so we can inject them
+        // into run_experiment calls if the LLM omits them.
+        let mut discovered_targets: std::collections::HashMap<String, serde_json::Value> =
+            std::collections::HashMap::new();
+
         for turn in 0..self.max_turns {
             tracing::info!(turn, "LLM planner turn");
+            if self.verbose {
+                eprintln!("[turn {}/{}] Thinking...", turn + 1, self.max_turns);
+            }
 
             let response = self.provider.chat(&self.messages, &tool_defs).await?;
 
@@ -109,6 +124,11 @@ impl ChaosPlanner {
 
             // Add assistant response to history
             self.messages.push(response.message.clone());
+
+            // Print intermediate LLM messages so the user can follow along
+            if self.verbose && !response.message.content.is_empty() {
+                eprintln!("[assistant] {}", response.message.content);
+            }
 
             match response.finish_reason {
                 FinishReason::Stop => {
@@ -126,6 +146,9 @@ impl ChaosPlanner {
                             tool = %tool_call.name,
                             "Executing tool call"
                         );
+                        if self.verbose {
+                            eprintln!("[tool] {}()", tool_call.name);
+                        }
 
                         let mut result = self
                             .tool_registry
@@ -133,9 +156,50 @@ impl ChaosPlanner {
                             .await;
                         result.tool_call_id = tool_call.id.clone();
 
+                        // Capture target configs from discover_resources calls
+                        if tool_call.name == "discover_resources" {
+                            if let (Some(target), Some(config)) = (
+                                tool_call.arguments["target"].as_str(),
+                                tool_call.arguments.get("target_config"),
+                            ) {
+                                discovered_targets
+                                    .insert(target.to_string(), config.clone());
+                            }
+                        }
+
                         // Intercept run_experiment calls to capture experiment configs
                         if tool_call.name == "run_experiment" {
-                            experiments.push(tool_call.arguments.clone());
+                            let mut exp_args = tool_call.arguments.clone();
+
+                            // Auto-inject target_config if missing
+                            let needs_inject = exp_args.get("target_config").is_none()
+                                || exp_args["target_config"].is_null();
+                            if needs_inject {
+                                let target_key = exp_args["target"]
+                                    .as_str()
+                                    .map(|s| s.to_string());
+                                if let Some(target) = target_key {
+                                    if let Some(config) =
+                                        discovered_targets.get(&target)
+                                    {
+                                        exp_args["target_config"] = config.clone();
+                                        tracing::info!(
+                                            target = %target,
+                                            "Auto-injected target_config from prior discovery"
+                                        );
+                                    }
+                                }
+                            }
+
+                            experiments.push(exp_args);
+                            if self.verbose {
+                                eprintln!(
+                                    "[experiment] Planned: {}",
+                                    tool_call.arguments["name"]
+                                        .as_str()
+                                        .unwrap_or("unnamed")
+                                );
+                            }
                         }
 
                         // Add tool result to conversation
@@ -193,19 +257,23 @@ You have access to tools to:
 2. `discover_resources` - Discover resources on a target (tables, pods, services)
 3. `run_experiment` - Execute a chaos experiment
 
-Your workflow:
+Your workflow — you MUST complete ALL steps without stopping to ask for confirmation:
 1. First, understand what infrastructure the user wants to test
 2. Use `list_skills` to see what chaos actions are available
 3. Use `discover_resources` to understand the target environment
 4. Plan appropriate chaos experiments based on the discovered resources
 5. Use `run_experiment` to execute the chaos plan
+6. After calling `run_experiment`, provide a brief summary of what was planned
+
+CRITICAL: You are running in a non-interactive pipeline. The user has already approved execution by running this command. Do NOT ask for confirmation, feedback, or permission. Do NOT stop to explain what you will do — just do it. You MUST call `run_experiment` at least once before finishing. If discovery returns resources, proceed to plan and execute experiments immediately.
 
 Important rules:
-- Always explain what you're about to do before doing it
 - Start with less destructive experiments and escalate gradually
-- All experiments have automatic rollback - but be mindful of duration
+- All experiments have automatic rollback — be mindful of duration
+- When calling `run_experiment`, you MUST include `target_config` with the same connection info you used for `discover_resources`
 - For servers, target relevant services based on discovery results
 - Never target system-critical services (sshd, systemd, etc.)
-- Keep experiment durations reasonable for the environment"#
+- Keep experiment durations reasonable (1m-5m for testing)
+- If discovery fails or returns no resources, still attempt a reasonable experiment based on available information"#
         .to_string()
 }
