@@ -10,15 +10,8 @@ You tell it what to target (a database, a k8s cluster, some servers), pick the s
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
-## TUI
-
-Interactive terminal UI — walk through provider setup, target configuration, and prompt entry in a guided wizard, then watch execution live.
-
 [![asciicast](https://asciinema.org/a/RECORDING_ID.svg)](https://asciinema.org/a/RECORDING_ID)
 
-```bash
-chaos tui
-```
 
 ## How it works
 
@@ -45,16 +38,14 @@ VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/system32-ai/chaos-ag
 INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/system32-ai/chaos-agents/master/install.sh | bash
 ```
 
-### Build from source
-
-```bash
-cargo install --path crates/chaos-cli
-
-# or
-make build
-```
-
 ## Usage
+
+Run in agent mode.
+
+```
+export OPENAI_API_KEY="sk.."
+chaos agent "Test cockroachdb resilience at postgres://root@localhost:26257/mydb"
+```
 
 ### List skills
 
