@@ -10,6 +10,16 @@ You tell it what to target (a database, a k8s cluster, some servers), pick the s
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
+## TUI
+
+Interactive terminal UI — walk through provider setup, target configuration, and prompt entry in a guided wizard, then watch execution live.
+
+[![asciicast](https://asciinema.org/a/RECORDING_ID.svg)](https://asciinema.org/a/RECORDING_ID)
+
+```bash
+chaos tui
+```
+
 ## How it works
 
 1. **Discover** — Agent connects to the target and figures out what's there (tables, pods, services, filesystems, etc.)
