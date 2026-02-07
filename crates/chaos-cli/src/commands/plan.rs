@@ -33,10 +33,10 @@ pub struct PlanArgs {
     #[arg(short, long)]
     pub config: Option<PathBuf>,
     /// LLM provider: anthropic, openai, or ollama
-    #[arg(long, default_value = "anthropic")]
+    #[arg(long, default_value = "anthropic", env = "CHAOS_PROVIDER")]
     pub provider: String,
     /// Model to use
-    #[arg(long)]
+    #[arg(long, env = "CHAOS_MODEL")]
     pub model: Option<String>,
     /// API key (or set via ANTHROPIC_API_KEY / OPENAI_API_KEY env var)
     #[arg(long)]

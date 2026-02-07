@@ -45,6 +45,23 @@ chaos-db  chaos-k8s  chaos-server
 
 ## Install
 
+### Quick install (latest release)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/system32-ai/chaos-agents/master/install.sh | bash
+```
+
+You can also set a specific version or install directory:
+
+```bash
+VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/system32-ai/chaos-agents/master/install.sh | bash
+
+# custom install location
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/system32-ai/chaos-agents/master/install.sh | bash
+```
+
+### Build from source
+
 ```bash
 cargo install --path crates/chaos-cli
 
