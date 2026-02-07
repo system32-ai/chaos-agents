@@ -8,6 +8,7 @@ use chaos_core::event::TracingEventSink;
 use chaos_core::orchestrator::Orchestrator;
 use chaos_core::skill::TargetDomain;
 use chaos_db::agent::DbAgent;
+use chaos_db::mongo_agent::MongoAgent;
 use chaos_k8s::agent::K8sAgent;
 use chaos_server::agent::ServerAgent;
 
@@ -35,8 +36,18 @@ pub async fn execute(args: RunArgs) -> anyhow::Result<()> {
         // Register the appropriate agent
         match experiment.target {
             TargetDomain::Database => {
-                let agent = DbAgent::from_yaml(&experiment.target_config)?;
-                orchestrator.register_agent(Box::new(agent));
+                let is_mongo = experiment
+                    .target_config
+                    .get("db_type")
+                    .and_then(|v| v.as_str())
+                    .map_or(false, |t| t == "mongo_d_b" || t == "mongodb" || t == "mongo");
+                if is_mongo {
+                    let agent = MongoAgent::from_yaml(&experiment.target_config)?;
+                    orchestrator.register_agent(Box::new(agent));
+                } else {
+                    let agent = DbAgent::from_yaml(&experiment.target_config)?;
+                    orchestrator.register_agent(Box::new(agent));
+                }
             }
             TargetDomain::Kubernetes => {
                 let agent = K8sAgent::from_yaml(&experiment.target_config)?;

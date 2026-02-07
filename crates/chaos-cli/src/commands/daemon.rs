@@ -13,6 +13,7 @@ use chaos_core::event::TracingEventSink;
 use chaos_core::orchestrator::Orchestrator;
 use chaos_core::skill::TargetDomain;
 use chaos_db::agent::DbAgent;
+use chaos_db::mongo_agent::MongoAgent;
 use chaos_k8s::agent::K8sAgent;
 use chaos_server::agent::ServerAgent;
 
@@ -99,7 +100,16 @@ pub async fn execute(args: DaemonArgs) -> anyhow::Result<()> {
 
                             match exp_config.target {
                                 TargetDomain::Database => {
-                                    if let Ok(agent) = DbAgent::from_yaml(&exp_config.target_config) {
+                                    let is_mongo = exp_config
+                                        .target_config
+                                        .get("db_type")
+                                        .and_then(|v| v.as_str())
+                                        .map_or(false, |t| t == "mongo_d_b" || t == "mongodb" || t == "mongo");
+                                    if is_mongo {
+                                        if let Ok(agent) = MongoAgent::from_yaml(&exp_config.target_config) {
+                                            orchestrator.register_agent(Box::new(agent));
+                                        }
+                                    } else if let Ok(agent) = DbAgent::from_yaml(&exp_config.target_config) {
                                         orchestrator.register_agent(Box::new(agent));
                                     }
                                 }

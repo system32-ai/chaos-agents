@@ -1,0 +1,22 @@
+[package]
+name = "chaos-tui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chaos-core = { path = "../chaos-core" }
+chaos-llm = { path = "../chaos-llm" }
+chaos-db = { path = "../chaos-db" }
+chaos-k8s = { path = "../chaos-k8s" }
+chaos-server = { path = "../chaos-server" }
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+unicode-width = "0.2"

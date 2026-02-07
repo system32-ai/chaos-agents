@@ -6,6 +6,19 @@ use crate::tool::{
     DiscoverResourcesTool, ListSkillsTool, RunExperimentTool, ToolDefinition, ToolRegistry,
 };
 
+/// Events emitted during LLM planning for UI consumption.
+#[derive(Debug, Clone)]
+pub enum PlannerEvent {
+    TurnStarted { turn: u32, max_turns: u32 },
+    AssistantMessage { content: String },
+    ToolCallStarted { name: String, arguments: serde_json::Value },
+    ToolCallCompleted { name: String, result: String, is_error: bool },
+    ExperimentPlanned { name: String, target: String },
+    DiscoveryResult { target: String, resource_count: usize },
+    PlanningComplete { turns: u32, experiment_count: usize },
+    TokenUsage { input_tokens: u32, output_tokens: u32 },
+}
+
 /// The LLM-driven chaos planner.
 ///
 /// This component uses an LLM to decide which chaos experiments to run based on
@@ -19,6 +32,7 @@ pub struct ChaosPlanner {
     messages: Vec<ChatMessage>,
     max_turns: u32,
     verbose: bool,
+    event_tx: Option<tokio::sync::mpsc::UnboundedSender<PlannerEvent>>,
 }
 
 impl ChaosPlanner {
@@ -41,6 +55,7 @@ impl ChaosPlanner {
             messages: Vec::new(),
             max_turns: 10,
             verbose: false,
+            event_tx: None,
         }
     }
 
@@ -70,6 +85,20 @@ impl ChaosPlanner {
     /// Enable verbose output (prints intermediate LLM messages and tool calls to stderr).
     pub fn set_verbose(&mut self, verbose: bool) {
         self.verbose = verbose;
+    }
+
+    /// Set up an event channel for TUI consumption.
+    /// Returns the receiver end of the channel.
+    pub fn set_event_channel(&mut self) -> tokio::sync::mpsc::UnboundedReceiver<PlannerEvent> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.event_tx = Some(tx);
+        rx
+    }
+
+    fn emit_event(&self, event: PlannerEvent) {
+        if let Some(ref tx) = self.event_tx {
+            let _ = tx.send(event);
+        }
     }
 
     /// Update the skills list (call after agents are initialized).
@@ -108,7 +137,11 @@ impl ChaosPlanner {
 
         for turn in 0..self.max_turns {
             tracing::info!(turn, "LLM planner turn");
-            if self.verbose {
+            self.emit_event(PlannerEvent::TurnStarted {
+                turn: turn + 1,
+                max_turns: self.max_turns,
+            });
+            if self.verbose && self.event_tx.is_none() {
                 eprintln!("[turn {}/{}] Thinking...", turn + 1, self.max_turns);
             }
 
@@ -120,19 +153,32 @@ impl ChaosPlanner {
                     output = usage.output_tokens,
                     "Token usage"
                 );
+                self.emit_event(PlannerEvent::TokenUsage {
+                    input_tokens: usage.input_tokens,
+                    output_tokens: usage.output_tokens,
+                });
             }
 
             // Add assistant response to history
             self.messages.push(response.message.clone());
 
-            // Print intermediate LLM messages so the user can follow along
-            if self.verbose && !response.message.content.is_empty() {
-                eprintln!("[assistant] {}", response.message.content);
+            // Emit assistant message
+            if !response.message.content.is_empty() {
+                self.emit_event(PlannerEvent::AssistantMessage {
+                    content: response.message.content.clone(),
+                });
+                if self.verbose && self.event_tx.is_none() {
+                    eprintln!("[assistant] {}", response.message.content);
+                }
             }
 
             match response.finish_reason {
                 FinishReason::Stop => {
                     tracing::info!("LLM planner finished");
+                    self.emit_event(PlannerEvent::PlanningComplete {
+                        turns: turn + 1,
+                        experiment_count: experiments.len(),
+                    });
                     return Ok(PlanResult {
                         message: response.message.content,
                         experiments,
@@ -146,7 +192,11 @@ impl ChaosPlanner {
                             tool = %tool_call.name,
                             "Executing tool call"
                         );
-                        if self.verbose {
+                        self.emit_event(PlannerEvent::ToolCallStarted {
+                            name: tool_call.name.clone(),
+                            arguments: tool_call.arguments.clone(),
+                        });
+                        if self.verbose && self.event_tx.is_none() {
                             eprintln!("[tool] {}()", tool_call.name);
                         }
 
@@ -155,6 +205,12 @@ impl ChaosPlanner {
                             .execute(&tool_call.name, tool_call.arguments.clone())
                             .await;
                         result.tool_call_id = tool_call.id.clone();
+
+                        self.emit_event(PlannerEvent::ToolCallCompleted {
+                            name: tool_call.name.clone(),
+                            result: result.content.clone(),
+                            is_error: result.is_error,
+                        });
 
                         // Capture target configs from discover_resources calls
                         if tool_call.name == "discover_resources" {
@@ -165,41 +221,75 @@ impl ChaosPlanner {
                                 discovered_targets
                                     .insert(target.to_string(), config.clone());
                             }
+                            // Emit discovery event with resource count
+                            let resource_count = result
+                                .content
+                                .parse::<serde_json::Value>()
+                                .ok()
+                                .and_then(|v| v["total_resources"].as_u64())
+                                .unwrap_or(0) as usize;
+                            self.emit_event(PlannerEvent::DiscoveryResult {
+                                target: tool_call.arguments["target"]
+                                    .as_str()
+                                    .unwrap_or("unknown")
+                                    .to_string(),
+                                resource_count,
+                            });
                         }
 
                         // Intercept run_experiment calls to capture experiment configs
                         if tool_call.name == "run_experiment" {
                             let mut exp_args = tool_call.arguments.clone();
 
-                            // Auto-inject target_config if missing
-                            let needs_inject = exp_args.get("target_config").is_none()
-                                || exp_args["target_config"].is_null();
-                            if needs_inject {
+                            // Auto-inject target_config if missing or null
+                            let has_target_config = exp_args
+                                .get("target_config")
+                                .map_or(false, |v| !v.is_null() && v.is_object());
+                            if !has_target_config {
                                 let target_key = exp_args["target"]
                                     .as_str()
                                     .map(|s| s.to_string());
-                                if let Some(target) = target_key {
-                                    if let Some(config) =
-                                        discovered_targets.get(&target)
-                                    {
-                                        exp_args["target_config"] = config.clone();
-                                        tracing::info!(
-                                            target = %target,
-                                            "Auto-injected target_config from prior discovery"
-                                        );
+
+                                // Try exact target match first
+                                let injected = target_key.as_ref().and_then(|t| {
+                                    discovered_targets.get(t).cloned()
+                                });
+
+                                // Fallback: use the only discovered target if there's exactly one
+                                let config_to_inject = injected.or_else(|| {
+                                    if discovered_targets.len() == 1 {
+                                        discovered_targets.values().next().cloned()
+                                    } else {
+                                        None
                                     }
+                                });
+
+                                if let Some(config) = config_to_inject {
+                                    exp_args["target_config"] = config;
+                                    if self.verbose && self.event_tx.is_none() {
+                                        eprintln!("[planner] Auto-injected target_config from prior discovery");
+                                    }
+                                } else if self.verbose && self.event_tx.is_none() {
+                                    eprintln!("[planner] Warning: no target_config available to inject");
                                 }
                             }
 
-                            experiments.push(exp_args);
-                            if self.verbose {
-                                eprintln!(
-                                    "[experiment] Planned: {}",
-                                    tool_call.arguments["name"]
-                                        .as_str()
-                                        .unwrap_or("unnamed")
-                                );
+                            let exp_name = tool_call.arguments["name"]
+                                .as_str()
+                                .unwrap_or("unnamed")
+                                .to_string();
+                            let exp_target = tool_call.arguments["target"]
+                                .as_str()
+                                .unwrap_or("unknown")
+                                .to_string();
+                            self.emit_event(PlannerEvent::ExperimentPlanned {
+                                name: exp_name.clone(),
+                                target: exp_target,
+                            });
+                            if self.verbose && self.event_tx.is_none() {
+                                eprintln!("[experiment] Planned: {}", exp_name);
                             }
+                            experiments.push(exp_args);
                         }
 
                         // Add tool result to conversation
@@ -213,6 +303,10 @@ impl ChaosPlanner {
                 }
                 FinishReason::MaxTokens => {
                     tracing::warn!("LLM hit max tokens, stopping");
+                    self.emit_event(PlannerEvent::PlanningComplete {
+                        turns: turn + 1,
+                        experiment_count: experiments.len(),
+                    });
                     return Ok(PlanResult {
                         message: response.message.content,
                         experiments,
@@ -221,6 +315,10 @@ impl ChaosPlanner {
                 }
                 FinishReason::Other(reason) => {
                     tracing::warn!(reason = %reason, "Unexpected finish reason");
+                    self.emit_event(PlannerEvent::PlanningComplete {
+                        turns: turn + 1,
+                        experiment_count: experiments.len(),
+                    });
                     return Ok(PlanResult {
                         message: response.message.content,
                         experiments,
@@ -230,6 +328,10 @@ impl ChaosPlanner {
             }
         }
 
+        self.emit_event(PlannerEvent::PlanningComplete {
+            turns: self.max_turns,
+            experiment_count: experiments.len(),
+        });
         Ok(PlanResult {
             message: "Max turns reached".to_string(),
             experiments,

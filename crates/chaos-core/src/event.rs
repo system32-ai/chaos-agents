@@ -41,6 +41,25 @@ pub trait EventSink: Send + Sync {
     async fn emit(&self, event: ExperimentEvent);
 }
 
+/// Channel-based event sink that forwards events to a receiver.
+pub struct ChannelEventSink {
+    tx: tokio::sync::mpsc::UnboundedSender<ExperimentEvent>,
+}
+
+impl ChannelEventSink {
+    pub fn new() -> (Self, tokio::sync::mpsc::UnboundedReceiver<ExperimentEvent>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        (Self { tx }, rx)
+    }
+}
+
+#[async_trait]
+impl EventSink for ChannelEventSink {
+    async fn emit(&self, event: ExperimentEvent) {
+        let _ = self.tx.send(event);
+    }
+}
+
 /// Simple tracing-based event sink.
 pub struct TracingEventSink;
 

@@ -8,7 +8,7 @@ pub async fn discover_schema(pool: &AnyPool) -> anyhow::Result<Vec<DbResource>> 
         r#"
         SELECT table_schema, table_name
         FROM information_schema.tables
-        WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'mysql', 'performance_schema', 'sys')
+        WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'mysql', 'performance_schema', 'sys', 'crdb_internal')
           AND table_type = 'BASE TABLE'
         ORDER BY table_schema, table_name
         "#,

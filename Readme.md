@@ -4,7 +4,7 @@ Chaos engineering tool that uses agents to break your infrastructure on purpose,
 
 You tell it what to target (a database, a k8s cluster, some servers), pick the skills you want to run, and it handles discovery, fault injection, and rollback. You can also point an LLM at your infra and let it decide what to break.
 
-**Databases** (PostgreSQL, MySQL) — Connects to your DB, looks at the schema, and hammers it with inserts, updates, heavy reads, or config changes. Rolls back everything when done.
+**Databases** (PostgreSQL, MySQL, CockroachDB, YugabyteDB, MongoDB) — Connects to your DB, discovers the schema (or collections for MongoDB), and hammers it with inserts, updates, heavy reads, or config changes. Rolls back everything when done.
 
 **Kubernetes** — Finds workloads in your cluster and starts killing pods, cordoning nodes, dropping network policies, or deploying resource hogs. Cleans up on exit.
 
@@ -62,6 +62,14 @@ db.insert_load            database     Bulk INSERT random rows into target table
 db.update_load            database     Randomly UPDATE existing rows in target tables
 db.select_load            database     Generate heavy SELECT query load against target tables
 db.config_change          database     ALTER database configuration parameters with rollback
+mongo.insert_load         database     Bulk INSERT random documents into MongoDB collections
+mongo.update_load         database     Randomly UPDATE existing documents in MongoDB collections
+mongo.find_load           database     Generate heavy read (find) query load against MongoDB collections
+mongo.index_drop          database     Drop secondary indexes from MongoDB collections
+mongo.profiling_change    database     Change MongoDB profiling level to add overhead
+mongo.connection_pool_stress database  Open many MongoDB connections to exhaust limits
+crdb.zone_config_change   database     Change CockroachDB zone config (replication, GC TTL)
+ysql.follower_reads       database     Toggle YugabyteDB follower reads for eventual consistency
 k8s.pod_kill              kubernetes   Delete random pods matching label selector
 k8s.node_drain            kubernetes   Cordon a node (mark unschedulable), rollback uncordons it
 k8s.network_chaos         kubernetes   Apply deny-all NetworkPolicy to isolate pods
@@ -121,6 +129,12 @@ Plan and execute in one step — the LLM generates experiments, you review, and 
 # Plan and run interactively
 chaos agent "Test our PostgreSQL database resilience under heavy write load"
 
+# Target CockroachDB or YugabyteDB — auto-detected from prompt keywords
+chaos agent "Test cockroachdb resilience at postgres://root@localhost:26257/mydb"
+
+# MongoDB — auto-detected from mongodb:// URL
+chaos agent "Load test mongodb://localhost:27017 collections"
+
 # Preview the generated config without executing
 chaos agent "Kill random pods in staging" --dry-run
 
@@ -165,6 +179,86 @@ experiments:
               value: "4MB"
     duration: "5m"
     parallel: false
+```
+
+### CockroachDB experiment
+
+CockroachDB and YugabyteDB are PostgreSQL wire-compatible, so they use `postgres://` connection URLs. The SQL skills (`db.insert_load`, `db.select_load`, `db.update_load`) work as-is. The `db.config_change` skill uses CockroachDB's `SET CLUSTER SETTING` syntax automatically.
+
+```yaml
+experiments:
+  - name: "cockroachdb-resilience"
+    target: database
+    target_config:
+      connection_url: "postgres://root@localhost:26257/mydb"
+      db_type: cockroach_db
+    skills:
+      - skill_name: "db.insert_load"
+        params:
+          rows_per_table: 5000
+      - skill_name: "crdb.zone_config_change"
+        params:
+          target: "DATABASE mydb"
+          changes:
+            - param: "num_replicas"
+              value: "1"
+            - param: "gc.ttlseconds"
+              value: "600"
+    duration: "5m"
+```
+
+### YugabyteDB experiment
+
+```yaml
+experiments:
+  - name: "yugabyte-consistency-test"
+    target: database
+    target_config:
+      connection_url: "postgres://yugabyte@localhost:5433/mydb"
+      db_type: yugabyte_db
+    skills:
+      - skill_name: "db.insert_load"
+        params:
+          rows_per_table: 5000
+      - skill_name: "ysql.follower_reads"
+        params:
+          enable: true
+          staleness: "60000ms"
+    duration: "5m"
+```
+
+### MongoDB experiment
+
+```yaml
+experiments:
+  - name: "mongodb-load-test"
+    target: database
+    target_config:
+      connection_url: "mongodb://localhost:27017"
+      db_type: mongo_d_b
+      databases: ["myapp"]
+    skills:
+      - skill_name: "mongo.insert_load"
+        params:
+          database: "myapp"
+          docs_per_collection: 5000
+      - skill_name: "mongo.update_load"
+        params:
+          database: "myapp"
+          docs: 200
+      - skill_name: "mongo.find_load"
+        params:
+          database: "myapp"
+          query_count: 1000
+      - skill_name: "mongo.index_drop"
+        params:
+          database: "myapp"
+          max_per_collection: 2
+      - skill_name: "mongo.profiling_change"
+        params:
+          database: "myapp"
+          level: 2
+    duration: "5m"
 ```
 
 ### Kubernetes experiment
@@ -273,7 +367,17 @@ Every skill saves the original state before doing anything. Rollback happens in 
 | Skill | What it does | Rollback |
 |-------|-------------|----------|
 | `db.insert_load` | INSERT rows | DELETE by stored IDs |
-| `db.config_change` | ALTER SYSTEM SET | Restore original value |
+| `db.update_load` | UPDATE rows | Restore original values |
+| `db.select_load` | Heavy SELECT queries | No-op (read-only) |
+| `db.config_change` | ALTER SYSTEM SET / SET CLUSTER SETTING | Restore original value |
+| `mongo.insert_load` | INSERT documents | DELETE by stored ObjectIds |
+| `mongo.update_load` | UPDATE documents | Replace with original documents |
+| `mongo.find_load` | Heavy find/aggregate queries | No-op (read-only) |
+| `mongo.index_drop` | Drop secondary indexes | Recreate indexes with original key/options |
+| `mongo.profiling_change` | Set profiling level to 2 (all ops) | Restore original profiling level |
+| `mongo.connection_pool_stress` | Open many connections | Connections drain on process exit |
+| `crdb.zone_config_change` | ALTER zone config (replication, GC) | Re-apply original zone config |
+| `ysql.follower_reads` | Enable follower reads + staleness | Restore original follower read settings |
 | `k8s.pod_kill` | Delete pod | Verify replacement pod is running |
 | `k8s.node_drain` | Cordon node | Uncordon node |
 | `k8s.network_chaos` | Create deny-all NetworkPolicy | Delete the policy |

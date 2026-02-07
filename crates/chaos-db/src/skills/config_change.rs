@@ -61,7 +61,7 @@ impl Skill for ConfigChangeSkill {
         for change in &params.changes {
             // Get current value
             let original_value = match self.db_type {
-                DbType::Postgres => {
+                DbType::Postgres | DbType::YugabyteDb => {
                     let query = format!("SHOW {}", change.param);
                     let row = sqlx::query(&query)
                         .fetch_one(pool)
@@ -69,6 +69,19 @@ impl Skill for ConfigChangeSkill {
                         .map_err(|e| {
                             ChaosError::Other(anyhow::anyhow!(
                                 "Failed to read config {}: {e}",
+                                change.param
+                            ))
+                        })?;
+                    row.try_get::<String, _>(0).unwrap_or_default()
+                }
+                DbType::CockroachDb => {
+                    let query = format!("SHOW CLUSTER SETTING {}", change.param);
+                    let row = sqlx::query(&query)
+                        .fetch_one(pool)
+                        .await
+                        .map_err(|e| {
+                            ChaosError::Other(anyhow::anyhow!(
+                                "Failed to read cluster setting {}: {e}",
                                 change.param
                             ))
                         })?;
@@ -87,16 +100,26 @@ impl Skill for ConfigChangeSkill {
                         })?;
                     row.try_get::<String, _>(0).unwrap_or_default()
                 }
+                DbType::MongoDB => {
+                    return Err(ChaosError::Config(
+                        "config_change skill not supported for MongoDB; use mongo-specific skills"
+                            .into(),
+                    ));
+                }
             };
 
             // Apply new value
             let alter_query = match self.db_type {
-                DbType::Postgres => {
+                DbType::Postgres | DbType::YugabyteDb => {
                     format!("ALTER SYSTEM SET {} = '{}'", change.param, change.value)
+                }
+                DbType::CockroachDb => {
+                    format!("SET CLUSTER SETTING {} = '{}'", change.param, change.value)
                 }
                 DbType::Mysql => {
                     format!("SET GLOBAL {} = '{}'", change.param, change.value)
                 }
+                DbType::MongoDB => unreachable!(),
             };
 
             sqlx::query(&alter_query)
@@ -109,8 +132,8 @@ impl Skill for ConfigChangeSkill {
                     ))
                 })?;
 
-            // For PostgreSQL, reload config
-            if self.db_type == DbType::Postgres {
+            // For PostgreSQL-compatible, reload config
+            if matches!(self.db_type, DbType::Postgres | DbType::YugabyteDb) {
                 let _ = sqlx::query("SELECT pg_reload_conf()").execute(pool).await;
             }
 
@@ -144,7 +167,13 @@ impl Skill for ConfigChangeSkill {
             .map_err(|e| ChaosError::Other(anyhow::anyhow!("Parse undo: {e}")))?;
 
         for entry in &entries {
-            let restore_query = if entry.db_type.to_lowercase().contains("postgres") {
+            let db_lower = entry.db_type.to_lowercase();
+            let restore_query = if db_lower.contains("cockroach") {
+                format!(
+                    "SET CLUSTER SETTING {} = '{}'",
+                    entry.param, entry.original_value
+                )
+            } else if db_lower.contains("postgres") || db_lower.contains("yugabyte") {
                 format!(
                     "ALTER SYSTEM SET {} = '{}'",
                     entry.param, entry.original_value
@@ -165,8 +194,8 @@ impl Skill for ConfigChangeSkill {
                 }
             }
 
-            // Reload for Postgres
-            if entry.db_type.to_lowercase().contains("postgres") {
+            // Reload for PostgreSQL-compatible
+            if db_lower.contains("postgres") || db_lower.contains("yugabyte") {
                 let _ = sqlx::query("SELECT pg_reload_conf()").execute(pool).await;
             }
         }

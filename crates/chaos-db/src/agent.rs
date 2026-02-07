@@ -6,13 +6,15 @@ use chaos_core::discovery::DiscoveredResource;
 use chaos_core::error::ChaosResult;
 use chaos_core::skill::{Skill, SkillContext, TargetDomain};
 
-use crate::config::DbTargetConfig;
+use crate::config::{DbTargetConfig, DbType};
 use crate::connection::create_pool;
 use crate::schema_discovery::discover_schema;
 use crate::skills::config_change::ConfigChangeSkill;
+use crate::skills::crdb_zone_config::CrdbZoneConfigSkill;
 use crate::skills::insert_load::InsertLoadSkill;
 use crate::skills::select_load::SelectLoadSkill;
 use crate::skills::update_load::UpdateLoadSkill;
+use crate::skills::ysql_follower_reads::YsqlFollowerReadsSkill;
 
 pub struct DbAgent {
     config: DbTargetConfig,
@@ -24,12 +26,23 @@ pub struct DbAgent {
 impl DbAgent {
     pub fn new(config: DbTargetConfig) -> Self {
         let db_type = config.db_type;
-        let skills: Vec<Box<dyn Skill>> = vec![
+        let mut skills: Vec<Box<dyn Skill>> = vec![
             Box::new(InsertLoadSkill),
             Box::new(UpdateLoadSkill),
             Box::new(SelectLoadSkill),
             Box::new(ConfigChangeSkill { db_type }),
         ];
+
+        // Add database-specific skills
+        match db_type {
+            DbType::CockroachDb => {
+                skills.push(Box::new(CrdbZoneConfigSkill));
+            }
+            DbType::YugabyteDb => {
+                skills.push(Box::new(YsqlFollowerReadsSkill));
+            }
+            _ => {}
+        }
         Self {
             config,
             pool: None,

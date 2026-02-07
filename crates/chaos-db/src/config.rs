@@ -14,4 +14,10 @@ pub struct DbTargetConfig {
 pub enum DbType {
     Postgres,
     Mysql,
+    #[serde(alias = "cockroach")]
+    CockroachDb,
+    #[serde(alias = "yugabyte")]
+    YugabyteDb,
+    #[serde(alias = "mongo")]
+    MongoDB,
 }

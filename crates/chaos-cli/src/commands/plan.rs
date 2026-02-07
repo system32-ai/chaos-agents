@@ -41,6 +41,9 @@ pub struct PlanArgs {
     /// API key (or set via ANTHROPIC_API_KEY / OPENAI_API_KEY env var)
     #[arg(long)]
     pub api_key: Option<String>,
+    /// Max number of LLM planning turns (default: 10)
+    #[arg(long)]
+    pub max_turns: Option<u32>,
 }
 
 pub async fn execute(args: PlanArgs) -> anyhow::Result<()> {
@@ -53,7 +56,7 @@ pub async fn execute(args: PlanArgs) -> anyhow::Result<()> {
         if let Some(prompt) = plan_config.system_prompt {
             planner.set_system_prompt(prompt);
         }
-        planner.set_max_turns(plan_config.max_turns);
+        planner.set_max_turns(args.max_turns.unwrap_or(plan_config.max_turns));
 
         // Connect MCP servers
         for mcp_config in plan_config.mcp_servers {
@@ -67,7 +70,10 @@ pub async fn execute(args: PlanArgs) -> anyhow::Result<()> {
         build_provider_config(&args)?
     };
 
-    let planner = ChaosPlanner::new(&provider_config);
+    let mut planner = ChaosPlanner::new(&provider_config);
+    if let Some(max_turns) = args.max_turns {
+        planner.set_max_turns(max_turns);
+    }
     run_planner(planner, &args.prompt).await
 }
 

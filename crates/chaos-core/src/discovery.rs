@@ -43,6 +43,29 @@ pub struct ColumnInfo {
     pub is_primary_key: bool,
 }
 
+/// Concrete resource for MongoDB targets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MongoResource {
+    pub database: String,
+    pub collection: String,
+    pub document_count: u64,
+}
+
+impl DiscoveredResource for MongoResource {
+    fn domain(&self) -> TargetDomain {
+        TargetDomain::Database
+    }
+    fn resource_type(&self) -> &str {
+        "collection"
+    }
+    fn name(&self) -> &str {
+        &self.collection
+    }
+    fn metadata(&self) -> serde_yaml::Value {
+        serde_yaml::to_value(self).unwrap_or(serde_yaml::Value::Null)
+    }
+}
+
 /// Concrete resource for Kubernetes targets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct K8sResource {

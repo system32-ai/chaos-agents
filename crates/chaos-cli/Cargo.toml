@@ -13,6 +13,7 @@ chaos-db = { path = "../chaos-db" }
 chaos-k8s = { path = "../chaos-k8s" }
 chaos-server = { path = "../chaos-server" }
 chaos-llm = { path = "../chaos-llm" }
+chaos-tui = { path = "../chaos-tui" }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
