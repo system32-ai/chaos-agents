@@ -10,7 +10,7 @@ You tell it what to target (a database, a k8s cluster, some servers), pick the s
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
-[![asciicast](https://asciinema.org/a/RECORDING_ID.svg)](https://asciinema.org/a/RECORDING_ID)
+[![asciicast](https://asciinema.org/a/cddaac8e-352c-475d-a3af-25428c4ceb84.svg)](https://asciinema.org/connect/cddaac8e-352c-475d-a3af-25428c4ceb84)
 
 
 ## How it works
@@ -40,7 +40,45 @@ INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/system32-a
 
 ## Usage
 
-Run in agent mode.
+### Interactive TUI
+
+Run `chaos` with no arguments to launch the interactive terminal UI:
+
+```bash
+chaos
+```
+
+The TUI walks you through a guided wizard:
+
+1. **Select provider** — Anthropic, OpenAI, or Ollama (auto-detects API keys from env)
+2. **Configure provider** — API key, model, max turns
+3. **Select target** — Database, Kubernetes, or Server
+4. **Configure target** — Connection URL, namespace, SSH hosts, etc.
+5. **Enter prompt** — Describe what chaos to run and set a duration
+6. **Review & confirm** — Check settings and press Enter to start
+
+Once running, the dashboard shows four live panels:
+
+| Panel | What it shows |
+|-------|--------------|
+| **Chat** | LLM conversation, tool calls, and experiment lifecycle events |
+| **Resources** | Discovered targets (tables, pods, services) |
+| **Skills** | Execution progress for each skill |
+| **Rollback** | Rollback step status |
+
+Keyboard shortcuts during execution:
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch between panels |
+| `Up/Down` | Scroll the Chat panel |
+| `Ctrl+C` | Cancel experiment (stay in TUI) |
+| `Ctrl+W` | Cancel experiment and quit |
+| `q` | Quit (after experiment finishes) |
+
+### Agent mode (CLI)
+
+Plan and execute from the command line:
 
 ```
 export OPENAI_API_KEY="sk.."
@@ -122,7 +160,7 @@ chaos plan "Break the database" --provider openai
 chaos plan "Run chaos on the entire staging environment" --config config/example-llm.yaml
 ```
 
-### Agent mode
+### Agent mode (CLI, detailed)
 
 Plan and execute in one step — the LLM generates experiments, you review, and approve:
 
