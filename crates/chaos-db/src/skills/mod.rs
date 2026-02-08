@@ -9,4 +9,7 @@ pub mod mongo_index_drop;
 pub mod mongo_profiling_change;
 pub mod mongo_connection_stress;
 pub mod crdb_zone_config;
+pub mod lock_utils;
+pub mod row_lock;
+pub mod table_lock;
 pub mod ysql_follower_reads;

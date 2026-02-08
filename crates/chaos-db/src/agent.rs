@@ -12,7 +12,9 @@ use crate::schema_discovery::discover_schema;
 use crate::skills::config_change::ConfigChangeSkill;
 use crate::skills::crdb_zone_config::CrdbZoneConfigSkill;
 use crate::skills::insert_load::InsertLoadSkill;
+use crate::skills::row_lock::RowLockSkill;
 use crate::skills::select_load::SelectLoadSkill;
+use crate::skills::table_lock::TableLockSkill;
 use crate::skills::update_load::UpdateLoadSkill;
 use crate::skills::ysql_follower_reads::YsqlFollowerReadsSkill;
 
@@ -32,6 +34,10 @@ impl DbAgent {
             Box::new(SelectLoadSkill),
             Box::new(ConfigChangeSkill { db_type }),
         ];
+
+        // Add lock skills for all SQL databases
+        skills.push(Box::new(TableLockSkill { db_type }));
+        skills.push(Box::new(RowLockSkill { db_type }));
 
         // Add database-specific skills
         match db_type {

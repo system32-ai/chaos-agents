@@ -69,7 +69,7 @@ pub async fn execute(args: AgentArgs) -> anyhow::Result<()> {
         let mut planner = ChaosPlanner::new(&plan_config.llm);
         planner.set_verbose(true);
         planner.update_skills(collect_skill_definitions());
-        planner.register_tool(Box::new(LiveDiscoverResourcesTool));
+        planner.register_tool(Box::new(LiveDiscoverResourcesTool { user_prompt: args.prompt.clone() }));
 
         if let Some(prompt) = plan_config.system_prompt {
             planner.set_system_prompt(prompt);
@@ -88,7 +88,7 @@ pub async fn execute(args: AgentArgs) -> anyhow::Result<()> {
         let mut planner = ChaosPlanner::new(&provider_config);
         planner.set_verbose(true);
         planner.update_skills(collect_skill_definitions());
-        planner.register_tool(Box::new(LiveDiscoverResourcesTool));
+        planner.register_tool(Box::new(LiveDiscoverResourcesTool { user_prompt: args.prompt.clone() }));
         if let Some(max_turns) = args.max_turns {
             planner.set_max_turns(max_turns);
         }

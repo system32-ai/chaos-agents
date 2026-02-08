@@ -20,3 +20,4 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 unicode-width = "0.2"
+uuid = { workspace = true }

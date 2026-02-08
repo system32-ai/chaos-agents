@@ -16,7 +16,9 @@ use chaos_server::agent::ServerAgent;
 use chaos_server::config::ServerTargetConfig;
 
 /// Live implementation of discover_resources that actually connects to the target.
-pub struct LiveDiscoverResourcesTool;
+pub struct LiveDiscoverResourcesTool {
+    pub user_prompt: String,
+}
 
 #[async_trait]
 impl Tool for LiveDiscoverResourcesTool {
@@ -29,7 +31,10 @@ impl Tool for LiveDiscoverResourcesTool {
                 "required": ["target", "target_config"],
                 "properties": {
                     "target": { "type": "string", "enum": ["database", "kubernetes", "server"] },
-                    "target_config": { "type": "object", "description": "Target-specific configuration (e.g. {\"connection_url\": \"postgres://...\", \"db_type\": \"postgres\"} for database)" }
+                    "target_config": {
+                        "type": "object",
+                        "description": "Target connection config. For database: {\"connection_url\": \"postgres://user:pass@host:5432/db\", \"db_type\": \"postgres\"} (db_type values: postgres, mysql, cockroach_db, yugabyte_db, mongo_d_b). For kubernetes: {\"namespace\": \"default\"}. For server: {\"hosts\": [{\"host\": \"1.2.3.4\", \"port\": 22, \"username\": \"user\", \"auth\": {\"type\": \"key\", \"private_key_path\": \"~/.ssh/id_ed25519\"}}]}"
+                    }
                 }
             }),
         }
@@ -41,7 +46,22 @@ impl Tool for LiveDiscoverResourcesTool {
             .ok_or_else(|| anyhow::anyhow!("Missing 'target' field"))?;
         let mut target_config_json = arguments["target_config"].clone();
 
-        // Auto-detect db_type from connection_url if missing
+        // Fallback: extract connection_url from user prompt if LLM omitted it
+        if matches!(target, "database" | "db") {
+            if target_config_json.get("connection_url").map_or(true, |v| v.is_null() || v.as_str().map_or(true, |s| s.is_empty())) {
+                if let Some(config) = extract_target_config_from_prompt(&self.user_prompt, Some(target)) {
+                    if let Some(obj) = config.as_object() {
+                        for (k, v) in obj {
+                            if target_config_json.get(k).map_or(true, |existing| existing.is_null()) {
+                                target_config_json[k.clone()] = v.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Auto-detect db_type from connection_url if still missing
         if matches!(target, "database" | "db") {
             if target_config_json.get("db_type").map_or(true, |v| v.is_null()) {
                 if let Some(url) = target_config_json.get("connection_url").and_then(|v| v.as_str()) {
@@ -53,6 +73,21 @@ impl Tool for LiveDiscoverResourcesTool {
                         "postgres"
                     };
                     target_config_json["db_type"] = serde_json::Value::String(db_type.to_string());
+                }
+            }
+        }
+
+        // Fallback: extract k8s config from prompt if missing
+        if matches!(target, "kubernetes" | "k8s") {
+            if target_config_json.get("namespace").map_or(true, |v| v.is_null()) {
+                if let Some(config) = extract_target_config_from_prompt(&self.user_prompt, Some(target)) {
+                    if let Some(obj) = config.as_object() {
+                        for (k, v) in obj {
+                            if target_config_json.get(k).map_or(true, |existing| existing.is_null()) {
+                                target_config_json[k.clone()] = v.clone();
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -5,6 +5,8 @@ pub mod progress;
 pub mod rollback;
 pub mod report;
 
+use std::time::Instant;
+
 use chaos_core::event::ExperimentEvent;
 use chaos_llm::planner::PlannerEvent;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -81,6 +83,9 @@ pub struct DashboardState {
     pub wizard_output: WizardOutput,
     pub conversation: Vec<ConversationEntry>,
     pub conversation_scroll: usize,
+    pub conversation_auto_scroll: bool,
+    /// Cached from last render so key handler knows the max offset.
+    pub rendered_max_scroll: std::cell::Cell<usize>,
     pub resources: Vec<ResourceEntry>,
     pub skills: Vec<SkillProgress>,
     pub rollback_steps: Vec<RollbackProgress>,
@@ -89,6 +94,7 @@ pub struct DashboardState {
     pub current_turn: u32,
     pub max_turns: u32,
     pub spinner: Spinner,
+    pub started_at: Instant,
 }
 
 impl DashboardState {
@@ -98,6 +104,8 @@ impl DashboardState {
             wizard_output: output,
             conversation: Vec::new(),
             conversation_scroll: 0,
+            conversation_auto_scroll: true,
+            rendered_max_scroll: std::cell::Cell::new(0),
             resources: Vec::new(),
             skills: Vec::new(),
             rollback_steps: Vec::new(),
@@ -106,6 +114,7 @@ impl DashboardState {
             current_turn: 0,
             max_turns: 0,
             spinner: Spinner::new(),
+            started_at: Instant::now(),
         }
     }
 
@@ -134,8 +143,25 @@ impl DashboardState {
                 result,
                 is_error,
             } => {
+                // Parse discover_resources results to populate the resources panel
+                if name == "discover_resources" && !is_error {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&result) {
+                        if let Some(resources) = json["resources"].as_array() {
+                            for r in resources {
+                                if let (Some(rtype), Some(rname)) =
+                                    (r["type"].as_str(), r["name"].as_str())
+                                {
+                                    self.resources.push(ResourceEntry {
+                                        resource_type: rtype.to_string(),
+                                        name: rname.to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let prefix = if is_error { "ERROR" } else { "OK" };
-                // Truncate long results
                 let result_preview = if result.len() > 200 {
                     format!("{}...", &result[..200])
                 } else {
@@ -199,16 +225,27 @@ impl DashboardState {
         match event {
             ExperimentEvent::Started { .. } => {
                 self.phase = DashboardPhase::Executing;
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: "Experiment started".into(),
+                });
+                self.auto_scroll_conversation();
             }
             ExperimentEvent::SkillExecuted {
                 skill_name,
                 success,
                 ..
             } => {
+                let status = if success { "OK" } else { "FAILED" };
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: format!("Skill {skill_name}: {status}"),
+                });
                 self.skills.push(SkillProgress {
                     skill_name,
                     success: Some(success),
                 });
+                self.auto_scroll_conversation();
             }
             ExperimentEvent::DurationWaitBegin { duration, .. } => {
                 self.phase = DashboardPhase::Waiting;
@@ -220,29 +257,60 @@ impl DashboardState {
             }
             ExperimentEvent::RollbackStarted { .. } => {
                 self.phase = DashboardPhase::RollingBack;
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: "Rolling back...".into(),
+                });
+                self.auto_scroll_conversation();
             }
             ExperimentEvent::RollbackStepCompleted {
                 skill_name,
                 success,
                 ..
             } => {
+                let status = if success { "OK" } else { "FAILED" };
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: format!("Rollback {skill_name}: {status}"),
+                });
                 self.rollback_steps.push(RollbackProgress {
                     skill_name,
                     success: Some(success),
                 });
+                self.auto_scroll_conversation();
             }
             ExperimentEvent::Completed { .. } => {
                 self.phase = DashboardPhase::Complete;
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: "Experiment completed successfully!".into(),
+                });
+                self.auto_scroll_conversation();
             }
             ExperimentEvent::Failed { error, .. } => {
+                self.conversation.push(ConversationEntry {
+                    role: "system".into(),
+                    content: format!("Experiment failed: {error}"),
+                });
                 self.phase = DashboardPhase::Failed(error);
+                self.auto_scroll_conversation();
             }
         }
     }
 
     fn auto_scroll_conversation(&mut self) {
-        // Set to max so Paragraph::scroll always shows the bottom
-        self.conversation_scroll = u16::MAX as usize;
+        self.conversation_auto_scroll = true;
+    }
+
+    pub fn elapsed_display(&self) -> String {
+        let secs = self.started_at.elapsed().as_secs();
+        if secs < 60 {
+            format!("{secs}s")
+        } else if secs < 3600 {
+            format!("{}m {}s", secs / 60, secs % 60)
+        } else {
+            format!("{}h {}m {}s", secs / 3600, (secs % 3600) / 60, secs % 60)
+        }
     }
 
     pub fn tick(&mut self) {
@@ -295,7 +363,7 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect) {
     let help_text = if state.phase.is_finished() {
         " [q] Quit  [Tab] Switch panel  [Up/Down] Scroll"
     } else {
-        " [Ctrl+C] Cancel  [Ctrl+X] Cancel & Quit  [Tab] Panel  [Up/Down] Scroll"
+        " [Ctrl+C] Cancel  [Ctrl+W] Cancel & Quit  [Tab] Panel  [Up/Down] Scroll"
     };
     let help = Paragraph::new(help_text).style(theme::dim_style());
     frame.render_widget(help, main_chunks[2]);
@@ -316,13 +384,13 @@ pub fn handle_key(state: &mut DashboardState, key: KeyEvent, should_quit: &mut b
         return DashboardAction::None;
     }
 
-    // Ctrl+X: cancel experiment and quit TUI
-    if key.code == KeyCode::Char('x') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Ctrl+W: cancel experiment and quit TUI
+    if key.code == KeyCode::Char('w') && key.modifiers.contains(KeyModifiers::CONTROL) {
         if !state.phase.is_finished() {
             state.phase = DashboardPhase::Cancelled;
             state.conversation.push(ConversationEntry {
                 role: "system".into(),
-                content: "Experiment cancelled, closing TUI (Ctrl+X)".into(),
+                content: "Experiment cancelled, closing TUI (Ctrl+W)".into(),
             });
         }
         *should_quit = true;
@@ -340,12 +408,23 @@ pub fn handle_key(state: &mut DashboardState, key: KeyEvent, should_quit: &mut b
         }
         KeyCode::Up => {
             if state.active_panel == 0 {
-                state.conversation_scroll = state.conversation_scroll.saturating_sub(1);
+                if state.conversation_auto_scroll {
+                    // Switch from auto-scroll to manual, start near the bottom
+                    state.conversation_auto_scroll = false;
+                    state.conversation_scroll = state.rendered_max_scroll.get().saturating_sub(1);
+                } else {
+                    state.conversation_scroll = state.conversation_scroll.saturating_sub(1);
+                }
             }
         }
         KeyCode::Down => {
             if state.active_panel == 0 {
-                state.conversation_scroll = state.conversation_scroll.saturating_add(1).min(u16::MAX as usize);
+                if !state.conversation_auto_scroll {
+                    state.conversation_scroll += 1;
+                    if state.conversation_scroll >= state.rendered_max_scroll.get() {
+                        state.conversation_auto_scroll = true;
+                    }
+                }
             }
         }
         _ => {}

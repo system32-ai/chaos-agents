@@ -42,7 +42,32 @@ pub fn render(state: &DashboardState, frame: &mut Frame, area: Rect, active: boo
         })
         .collect();
 
-    let scroll_y = state.conversation_scroll.min(u16::MAX as usize) as u16;
+    // Estimate total wrapped display rows so we can compute max scroll.
+    // inner_width excludes the 2 border columns.
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let inner_height = area.height.saturating_sub(2) as usize;
+
+    let total_rows: usize = lines
+        .iter()
+        .map(|line| {
+            let len: usize = line.spans.iter().map(|s| s.content.len()).sum();
+            if inner_width == 0 {
+                1
+            } else {
+                (len.max(1) + inner_width - 1) / inner_width
+            }
+        })
+        .sum();
+
+    let max_scroll = total_rows.saturating_sub(inner_height);
+    state.rendered_max_scroll.set(max_scroll);
+
+    let scroll_y = if state.conversation_auto_scroll {
+        max_scroll
+    } else {
+        state.conversation_scroll.min(max_scroll)
+    } as u16;
+
     let paragraph = Paragraph::new(lines)
         .block(block)
         .wrap(Wrap { trim: false })
