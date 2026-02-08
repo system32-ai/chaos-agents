@@ -10,7 +10,7 @@ You tell it what to target (a database, a k8s cluster, some servers), pick the s
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
-[![asciicast](https://asciinema.org/a/XkxSuzxjQiRztgvW.svg)](https://asciinema.org/a/XkxSuzxjQiRztgvW?t=0&loop=1)
+[![asciicast](https://asciinema.org/a/XkxSuzxjQiRztgvW.svg)](https://asciinema.org/a/XkxSuzxjQiRztgvW?t=0&loop=1&autoplay=1)
 
 
 ## How it works
@@ -101,6 +101,8 @@ db.insert_load            database     Bulk INSERT random rows into target table
 db.update_load            database     Randomly UPDATE existing rows in target tables
 db.select_load            database     Generate heavy SELECT query load against target tables
 db.config_change          database     ALTER database configuration parameters with rollback
+db.table_lock             database     Acquire table-level locks to simulate lock contention
+db.row_lock               database     Acquire row-level locks (SELECT FOR UPDATE) to simulate row contention
 mongo.insert_load         database     Bulk INSERT random documents into MongoDB collections
 mongo.update_load         database     Randomly UPDATE existing documents in MongoDB collections
 mongo.find_load           database     Generate heavy read (find) query load against MongoDB collections
@@ -409,6 +411,8 @@ Every skill saves the original state before doing anything. Rollback happens in 
 | `db.update_load` | UPDATE rows | Restore original values |
 | `db.select_load` | Heavy SELECT queries | No-op (read-only) |
 | `db.config_change` | ALTER SYSTEM SET / SET CLUSTER SETTING | Restore original value |
+| `db.table_lock` | Acquire table-level locks | Release locks on transaction end |
+| `db.row_lock` | SELECT FOR UPDATE on rows | Release locks on transaction end |
 | `mongo.insert_load` | INSERT documents | DELETE by stored ObjectIds |
 | `mongo.update_load` | UPDATE documents | Replace with original documents |
 | `mongo.find_load` | Heavy find/aggregate queries | No-op (read-only) |
