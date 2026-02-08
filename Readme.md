@@ -10,7 +10,7 @@ You tell it what to target (a database, a k8s cluster, some servers), pick the s
 
 **Servers** — SSHes into hosts, discovers what's running (services, ports, filesystems), and goes after them: fills disks, stops services, changes permissions, spikes CPU/memory. Restores original state after.
 
-[![asciicast](https://asciinema.org/a/cddaac8e-352c-475d-a3af-25428c4ceb84.svg)](https://asciinema.org/a/cddaac8e-352c-475d-a3af-25428c4ceb84)
+[![asciicast](https://asciinema.org/a/XkxSuzxjQiRztgvW.svg)](https://asciinema.org/a/XkxSuzxjQiRztgvW)
 
 
 ## How it works
