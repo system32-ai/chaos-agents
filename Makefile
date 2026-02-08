@@ -2,16 +2,18 @@ VERSION ?= $(shell grep '^version' crates/chaos-cli/Cargo.toml | head -1 | sed '
 BINARY := chaos
 RELEASE_DIR := target/release-artifacts
 
-TARGETS := \
+LINUX_TARGETS := \
 	x86_64-unknown-linux-gnu \
 	x86_64-unknown-linux-musl \
 	aarch64-unknown-linux-gnu \
-	aarch64-unknown-linux-musl \
+	aarch64-unknown-linux-musl
+
+MACOS_TARGETS := \
 	x86_64-apple-darwin \
 	aarch64-apple-darwin
 
 IMAGE := chaos-agents
-.PHONY: build check test clean install list-skills validate-example docker docker-run release-build release release-dry-run
+.PHONY: build check test clean install list-skills validate-example docker docker-run release-build release-build-linux release-build-macos release-build-local release release-dry-run
 
 build:
 	cargo build --release
@@ -43,21 +45,40 @@ docker-run:
 
 HOST_TARGET := $(shell rustc -vV | grep '^host:' | cut -d' ' -f2)
 
-release-build:
-	@mkdir -p $(RELEASE_DIR)
-	@for target in $(TARGETS); do \
-		echo "Building $$target..."; \
-		if [ "$$target" = "$(HOST_TARGET)" ]; then \
-			cargo build --release --target $$target -p chaos-cli; \
-		else \
-			cross build --release --target $$target -p chaos-cli; \
-		fi && \
-		tar -czf $(RELEASE_DIR)/$(BINARY)-$(VERSION)-$$target.tar.gz \
-			-C target/$$target/release $(BINARY) || \
-		echo "WARN: Failed to build $$target, skipping"; \
-	done
+release-build: release-build-linux release-build-macos
 	@echo "Artifacts in $(RELEASE_DIR):"
 	@ls -lh $(RELEASE_DIR)/
+
+release-build-linux:
+	@mkdir -p $(RELEASE_DIR)
+	@for target in $(LINUX_TARGETS); do \
+		echo "Building $$target (Docker)..."; \
+		docker build \
+			--build-arg TARGET=$$target \
+			-f Dockerfile.release \
+			-t chaos-build-$$target \
+			. && \
+		container_id=$$(docker create chaos-build-$$target) && \
+		docker cp $$container_id:/out/$(BINARY) $(RELEASE_DIR)/$(BINARY) && \
+		docker rm $$container_id > /dev/null && \
+		tar -czf $(RELEASE_DIR)/$(BINARY)-$(VERSION)-$$target.tar.gz \
+			-C $(RELEASE_DIR) $(BINARY) && \
+		rm -f $(RELEASE_DIR)/$(BINARY) && \
+		echo "Done: $(BINARY)-$(VERSION)-$$target.tar.gz" || \
+		echo "WARN: Failed to build $$target, skipping"; \
+	done
+
+release-build-macos:
+	@mkdir -p $(RELEASE_DIR)
+	@for target in $(MACOS_TARGETS); do \
+		echo "Building $$target (native)..."; \
+		rustup target add $$target 2>/dev/null || true; \
+		cargo build --release --target $$target -p chaos-cli && \
+		tar -czf $(RELEASE_DIR)/$(BINARY)-$(VERSION)-$$target.tar.gz \
+			-C target/$$target/release $(BINARY) && \
+		echo "Done: $(BINARY)-$(VERSION)-$$target.tar.gz" || \
+		echo "WARN: Failed to build $$target, skipping"; \
+	done
 
 release-build-local:
 	@mkdir -p $(RELEASE_DIR)
